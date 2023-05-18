@@ -45,6 +45,8 @@ jobs:
             python=3.9
 
       - name: Build kalpy
+        env:
+          CONDA_ROOT: /usr/share/miniconda3/envs/my-env
         shell: bash -l {0}
         run: pip install .
 
