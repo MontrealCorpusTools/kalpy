@@ -18,6 +18,7 @@ if(CONDA_ROOT)
     endif()
 
 endif()
+add_definitions(-DKALDI_NO_PORTAUDIO=1)
 if (MSVC)
     find_package(dlfcn-win32 REQUIRED)
     set(CMAKE_DL_LIBS dlfcn-win32::dl)
@@ -32,7 +33,6 @@ if (MSVC)
     # some warnings related with fst
     add_compile_options(/wd4018 /wd4244 /wd4267 /wd4291 /wd4305)
 
-    add_definitions(-DKALDI_NO_PORTAUDIO=1)
     set(CompilerFlags
         CMAKE_CXX_FLAGS
         CMAKE_CXX_FLAGS_DEBUG
