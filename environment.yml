@@ -1,0 +1,15 @@
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.8
+  - numpy
+  - librosa
+  - cmake
+  - ninja
+  - pysoundfile
+  - kaldi
+  - scipy
+  - pynini
+  - openfst
+  - setuptools_scm
+  - pytest
