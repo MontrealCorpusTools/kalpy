@@ -297,7 +297,7 @@ void pybind_online_feat_input(py::module &m) {
         .def("Dim", &PyClass::Dim)
         .def("Deallocate", &PyClass::Deallocate);
   }
-#if !defined(_MSC_VER)
+#ifndef KALDI_NO_PORTAUDIO
 
   {
     using PyClass = OnlineUdpInput;
@@ -380,11 +380,11 @@ void pybind_online_feat_input(py::module &m) {
 
 void pybind_online_tcp_source(py::module &m) {
 
-#if !defined(_MSC_VER)
+#ifndef KALDI_NO_PORTAUDIO
   {
     using PyClass = OnlineTcpVectorSource;
 
-    auto online_tcp_vector_source = py::class_<OnlineTcpVectorSource, OnlineAudioSourceItf>(
+    auto online_tcp_vector_source = py::class_<PyClass, OnlineAudioSourceItf>(
         m, "OnlineTcpVectorSource");
     online_tcp_vector_source.def(py::init<int32 >(),
             py::arg("socket"))
@@ -394,7 +394,7 @@ void pybind_online_tcp_source(py::module &m) {
       .def("SamplesProcessed", &PyClass::SamplesProcessed)
       .def("ResetSamples", &PyClass::ResetSamples);
   }
-#endif // !defined(_MSC_VER)
+#endif // !defined(KALDI_NO_PORTAUDIO)
 }
 
 void pybind_onlinebin_util(py::module &m) {
