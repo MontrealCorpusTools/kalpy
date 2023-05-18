@@ -929,11 +929,10 @@ void pybind_nnet_nnet_component(py::module& m) {
     .value("kParallelComponent", Component::ComponentType::kParallelComponent)
     .value("kMultiBasisComponent", Component::ComponentType::kMultiBasisComponent)
     .export_values();
-    py::class_<PyClass::key_value>(component, "key_value")
-    .def(py::init<>())
-    .def_readonly("key", &PyClass::key_value::key)
-    .def_readonly("value", &PyClass::key_value::value);
-  }
+    //py::class_<PyClass::key_value>(component, "key_value")
+    //.def_readonly("key", &PyClass::key_value::key)
+    //.def_readonly("value", &PyClass::key_value::value);
+ }
   {
     using PyClass = UpdatableComponent;
 
