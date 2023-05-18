@@ -12,4 +12,5 @@ dependencies:
   - pynini
   - openfst
   - setuptools_scm
+  - pybind11
   - pytest
