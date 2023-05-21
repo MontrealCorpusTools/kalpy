@@ -63,6 +63,9 @@ class CMakeBuild(build_ext):
             # exported for Ninja to pick it up, which is a little tricky to do.
             # Users can override the generator with CMAKE_GENERATOR in CMake
             # 3.15+.
+            conda_root = os.environ.get("CONDA_PREFIX", None)
+            if conda_root:
+                cmake_args += [f"-DCONDA_ROOT={conda_root}"]
             if not cmake_generator or cmake_generator == "Ninja":
                 try:
                     import ninja
