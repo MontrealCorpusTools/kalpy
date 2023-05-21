@@ -88,13 +88,19 @@ void init_hmm(py::module &_m) {
 }
 {
   using PyClass = TransitionModel;
-  py::class_<PyClass>(m, "TransitionModel")
+  py::class_<PyClass, TransitionInformation>(m, "TransitionModel")
       .def(py::init<>())
       .def(py::init<const ContextDependencyInterface&, const HmmTopology&>(),
            "Initialize the object [e.g. at the start of training]. The class "
            "keeps a copy of the HmmTopology object, but not the "
            "ContextDependency object.",
            py::arg("ctx_dep"), py::arg("hmm_topo"))
+     .def_static("read_from_file", [](std::string file_path) {
+
+               TransitionModel trans_model;
+               ReadKaldiObject(file_path, &trans_model);
+               return &trans_model;
+          }, py::return_value_policy::reference)
       .def("Read", &PyClass::Read, py::arg("is"), py::arg("binary"))
       .def("Write", &PyClass::Write, py::arg("os"), py::arg("binary"))
       .def("GetTopo", &PyClass::GetTopo, py::return_value_policy::reference)

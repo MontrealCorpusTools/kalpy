@@ -63,8 +63,6 @@ class CMakeBuild(build_ext):
             # exported for Ninja to pick it up, which is a little tricky to do.
             # Users can override the generator with CMAKE_GENERATOR in CMake
             # 3.15+.
-            conda_root = os.environ.get("CONDA_PREFIX", None)
-            cmake_args += [f"-DCONDA_ROOT={conda_root}"]
             if not cmake_generator or cmake_generator == "Ninja":
                 try:
                     import ninja
@@ -127,6 +125,8 @@ class CMakeBuild(build_ext):
         subprocess.run(["cmake", "--build", ".", *build_args], cwd=build_temp, check=True)
 
 
+# The information here can also be placed in setup.cfg - better separation of
+# logic and declaration, and simpler if you include description/version in a file.
 setup(
     name="kalpy",
     version="5.5.1068",

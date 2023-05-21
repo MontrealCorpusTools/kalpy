@@ -6,6 +6,10 @@
 #include "util/kaldi-holder-inl.h"
 #include "util/parse-options.h"
 #include "itf/options-itf.h"
+
+#include "hmm/transition-model.h"
+#include "tree/context-dep.h"
+
 using namespace kaldi;
 
 
@@ -185,4 +189,7 @@ void init_util(py::module &_m) {
       m, "_RandomAccessInt32VectorReader");
 
   pybind_table_writer<BasicVectorHolder<int32>>(m, "_Int32VectorWriter");
+    pybind_read_kaldi_object<TransitionModel>(m);
+    pybind_read_kaldi_object<ContextDependency>(m);
+
 }

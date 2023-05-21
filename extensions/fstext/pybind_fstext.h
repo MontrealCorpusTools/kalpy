@@ -263,5 +263,6 @@ void pybind_fstext_trivial_factor_weight(py::module &);
 void pybind_kaldi_fst_io(py::module &);
 void pybind_table_compose(py::module &);
 void pybind_table_matcher(py::module &);
+void pybind_fst_types(py::module &);
 void init_fstext(py::module &);
 #endif  // KALPY_PYBIND_FSTEXT_H_

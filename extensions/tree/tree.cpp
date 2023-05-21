@@ -986,6 +986,12 @@ void pybind_context_dep(py::module& m) {
     context_dependency.def(py::init<>())
       .def(py::init<int32, int32, EventMap *>(), py::arg("N"),
            py::arg("P"), py::arg("to_pdf"))
+        .def_static("read_from_file",[](const std::string file_path){
+
+                  ContextDependency ctx_dep;
+                  ReadKaldiObject(file_path, &ctx_dep);
+                  return &ctx_dep;
+              }, py::arg("file_path"))
         .def("Read", &PyClass::Read, py::arg("is"), py::arg("binary"))
         .def("Write", &PyClass::Write, py::arg("os"), py::arg("binary"))
         .def("ContextWidth", &PyClass::ContextWidth)

@@ -1,5 +1,6 @@
 
 #include "fstext/pybind_fstext.h"
+#include "util/pybind_util.h"
 #include "fst/fst.h"
 #include "fstext/context-fst.h"
 #include "fstext/deterministic-fst.h"
@@ -483,6 +484,40 @@ void pybind_fstext_remove_eps_local(py::module &m) {
 }
 void pybind_fstext_trivial_factor_weight(py::module &m) {
 }
+void pybind_fst_types(py::module &m) {
+
+  {
+    using PyClass = VectorFst<StdArc>;
+
+    auto vector_fst = py::class_<PyClass>(
+        m, "VectorFst");
+    vector_fst.def(py::init<>())
+      .def("Start", &PyClass::Start)
+      .def("Final", &PyClass::Final,
+            py::arg("s"))
+      .def("write_to_string", [](const PyClass& f){
+             std::ostringstream os;
+             fst::FstWriteOptions opts;
+             opts.stream_write = true;
+             f.Write(os, opts);
+            return py::bytes(os.str());
+      })
+      .def_static("from_string", [](const std::string &bytes){
+            std::istringstream str(bytes);
+
+            fst::FstHeader hdr;
+            if (!hdr.Read(str, "<unspecified>"))
+            KALDI_ERR << "Reading FST: error reading FST header from "
+                        << kaldi::PrintableRxfilename("<unspecified>");
+              FstReadOptions ropts("<unspecified>", &hdr);
+            VectorFst<StdArc> *f = VectorFst<StdArc>::Read(str, ropts);
+            return f;
+      },
+            py::arg("bytes"),
+           py::return_value_policy::reference);
+  }
+}
+
 
 void init_fstext(py::module &_m) {
   py::module m = _m.def_submodule("fstext", "fstext pybind for Kaldi");
@@ -496,4 +531,7 @@ void init_fstext(py::module &_m) {
       "Contain two members: fst::LatticeWeight and std::vector<int>");
     pybind_table_matcher<StdVectorFst>(m);
     pybind_table_compose<StdArc>(m);
+    pybind_fst_types(m);
+
+  pybind_table_writer<fst::VectorFstHolder>(m, "VectorFstWriter");
 }

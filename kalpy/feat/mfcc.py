@@ -1,11 +1,26 @@
 from __future__ import annotations
 
+import dataclasses
 import typing
 
 import librosa
 import numpy as np
 
 from _kalpy import feat
+from _kalpy.matrix import FloatMatrixBase
+from _kalpy.util import (
+    _BaseFloatMatrixWriter,
+    _RandomAccessBaseFloatMatrixReader,
+    _SequentialBaseFloatMatrixReader,
+)
+
+
+@dataclasses.dataclass
+class Segment:
+    file_path: str
+    begin: typing.Optional[float] = None
+    end: typing.Optional[float] = None
+    channel: typing.Optional[int] = 0
 
 
 class MfccComputer:
@@ -65,23 +80,74 @@ class MfccComputer:
 
     def compute_mfccs(
         self,
-        filepath: str,
-        begin: typing.Optional[float] = None,
-        end: typing.Optional[float] = None,
-        channel: int = 0,
-    ):
+        segment: Segment,
+    ) -> np.ndarray:
         duration = None
-        if end is not None and begin is not None:
-            duration = end - begin
+        if segment.end is not None and segment.begin is not None:
+            duration = segment.end - segment.begin
         wave, sr = librosa.load(
-            filepath,
+            segment.file_path,
             sr=16000,
-            offset=begin,
+            offset=segment.begin,
             duration=duration,
             mono=False,
         )
         wave = np.round(wave * 32768)
         if len(wave.shape) == 2:
+            channel = 0 if segment.channel is None else segment.channel
             wave = wave[channel, :]
         mfccs = self.mfcc_obj.compute(wave)
         return mfccs.numpy()
+
+    def _compute_mfccs_for_export(
+        self,
+        segment: Segment,
+    ) -> FloatMatrixBase:
+        duration = None
+        if segment.end is not None and segment.begin is not None:
+            duration = segment.end - segment.begin
+        wave, sr = librosa.load(
+            segment.file_path,
+            sr=16000,
+            offset=segment.begin,
+            duration=duration,
+            mono=False,
+        )
+        wave = np.round(wave * 32768)
+        if len(wave.shape) == 2:
+            channel = 0 if segment.channel is None else segment.channel
+            wave = wave[channel, :]
+        mfccs = self.mfcc_obj.compute(wave)
+        return mfccs
+
+    def export_feats(self, file_name: str, segments: typing.Dict[str, Segment]):
+        writer = _BaseFloatMatrixWriter(f"ark:{file_name}")
+        for key, segment in segments.items():
+            feats = self._compute_mfccs_for_export(segment)
+            writer.Write(key, feats)
+        writer.Close()
+
+
+class FeatureArchive:
+    def __init__(self, file_name):
+        self.file_name = file_name
+
+    def __iter__(self):
+        reader = _SequentialBaseFloatMatrixReader(f"ark:{self.file_name}")
+        try:
+            while not reader.Done():
+                utt = reader.Key()
+                feats = reader.Value().numpy()
+                yield utt, feats
+                reader.Next()
+        finally:
+            reader.Close()
+
+    def __getitem__(self, item):
+        reader = _RandomAccessBaseFloatMatrixReader(f"ark:{self.file_name}")
+        try:
+            if not reader.HasKey(item):
+                raise Exception(f"No key {item} found in {self.file_name}")
+            return reader.Value(item).numpy()
+        finally:
+            reader.Close()

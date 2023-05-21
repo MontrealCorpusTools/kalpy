@@ -1,3 +1,4 @@
 librosa
 numpy
 pysoundfile
+pynini

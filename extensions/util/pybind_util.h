@@ -125,6 +125,16 @@ void pybind_table_writer(py::module& m, const std::string& class_name,
            "destructor will throw on error if you do not call Close().");
 }
 
+template <class C>
+void pybind_read_kaldi_object(py::module& m) {
+  m.def("ReadKaldiObject",
+          py::overload_cast<const std::string &,
+                                        C *>(&ReadKaldiObject<C>),
+           py::arg("filename"),
+           py::arg("c")
+     );
+}
+
 template <class BasicType>
 void pybind_basic_vector_holder(py::module& m, const std::string& class_name,
                                 const std::string& class_help_doc = "") {

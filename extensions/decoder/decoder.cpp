@@ -1611,6 +1611,16 @@ void pybind_training_graph_compiler(py::module &m) {
                        py::arg("lex_fst"),
                        py::arg("disambig_syms"),
                        py::arg("opts"))
+          .def(py::init([](const TransitionModel &trans_model, const ContextDependency &ctx_dep,
+                const py::object &lex_fst, const std::vector<int32> &disambig_syms,
+                const TrainingGraphCompilerOptions &opts){
+
+                    fst::VectorFst<fst::StdArc> * lf;
+                    lf = (fst::VectorFst<fst::StdArc> *) &lex_fst;
+
+                    TrainingGraphCompiler gc(trans_model, ctx_dep, lf, disambig_syms, opts);
+                    return gc;
+          }), py::return_value_policy::reference)
         .def("CompileGraph",
                &PyClass::CompileGraph,
                "CompileGraph compiles a single training graph its input is a "
@@ -1633,6 +1643,20 @@ void pybind_training_graph_compiler(py::module &m) {
                &PyClass::CompileGraphFromText,
                "This version creates an FST from the text and calls CompileGraph.",
                py::arg("transcript"), py::arg("out_fst"))
+        .def("CompileGraphFromText",
+               [](PyClass& gc, const std::vector<int32> &transcript){
+
+                    VectorFst<StdArc> decode_fst;
+
+                    if (!gc.CompileGraphFromText(transcript, &decode_fst)) {
+                         decode_fst.DeleteStates();  // Just make it empty.
+                    }
+                    if (decode_fst.Start() == fst::kNoStateId) {
+                         KALDI_WARN << "Empty decoding graph for utterance";
+                    }
+                    return decode_fst;
+               },
+               py::arg("transcript"))
         .def("CompileGraphsFromText",
                &PyClass::CompileGraphFromText,
                "This function creates FSTs from the text and calls CompileGraphs.",
