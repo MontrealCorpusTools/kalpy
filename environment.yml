@@ -7,7 +7,7 @@ dependencies:
   - cmake
   - ninja
   - pysoundfile
-  - kaldi
+  - kaldi=*=*cpu*
   - scipy
   - pynini
   - openfst
