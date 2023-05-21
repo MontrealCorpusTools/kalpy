@@ -53,6 +53,12 @@ endif (MSVC)
 #else()
 #   add_definitions(-DHAVE_CUDA=0)
 #endif()
+find_package(CUDA)
+
+if(CUDA_FOUND)
+
+add_definitions(-DHAVE_CUDA=1)
+endif()
 
 find_package(pybind11 REQUIRED)
 include_directories(extensions)
@@ -83,11 +89,9 @@ pybind11_add_module(_kalpy extensions/_kalpy.cpp
 target_link_libraries(_kalpy PUBLIC kaldi-base kaldi-chain
                                     kaldi-matrix
                                     kaldi-hmm
-                                    kaldi-cudadecoder kaldi-cudafeat
                                     kaldi-online kaldi-online2 kaldi-rnnlm
                                     kaldi-nnet3
                                     kaldi-nnet2 kaldi-nnet
-                                    kaldi-cudamatrix
                                     kaldi-kws
                                     kaldi-decoder
                                     kaldi-lat
@@ -98,6 +102,13 @@ target_link_libraries(_kalpy PUBLIC kaldi-base kaldi-chain
                                     kaldi-util
                                     fst
                                     )
+
+if(CUDA_FOUND)
+
+target_link_libraries(_kalpy PUBLIC kaldi-cudadecoder kaldi-cudafeat
+                                    kaldi-cudamatrix
+                                    )
+endif()
 target_compile_definitions(_kalpy
                            PRIVATE VERSION_INFO="0.0.1")
 if(MSVC)
