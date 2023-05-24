@@ -46,6 +46,7 @@ jobs:
       - name: Build a binary wheel and a source tarball
         env:
           CONDA_PREFIX: /usr/share/miniconda3/envs/my-env
+        shell: bash -l {0}
         run: >-
           python -m
           build
