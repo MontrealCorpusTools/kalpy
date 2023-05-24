@@ -14,3 +14,7 @@ dependencies:
   - setuptools_scm
   - pybind11
   - pytest
+  - pip
+  - pip:
+      - build
+      - twine

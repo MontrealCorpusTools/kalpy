@@ -57,7 +57,7 @@ find_package(CUDA)
 
 if(CUDA_FOUND)
 
-add_definitions(-DHAVE_CUDA=1)
+#add_definitions(-DHAVE_CUDA=1)
 endif()
 
 find_package(pybind11 REQUIRED)

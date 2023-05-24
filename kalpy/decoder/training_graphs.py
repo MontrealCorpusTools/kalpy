@@ -5,6 +5,7 @@ from _kalpy.decoder import TrainingGraphCompilerOptions
 from _kalpy.fstext import VectorFstWriter
 from _kalpy.hmm import TransitionModel
 from _kalpy.tree import ContextDependency
+from _kalpy.util import ReadKaldiObject
 from kalpy.fstext.lexicon import LexiconCompiler
 from kalpy.fstext.utils import pynini_to_kaldi
 
@@ -12,23 +13,25 @@ from kalpy.fstext.utils import pynini_to_kaldi
 class TrainingGraphCompiler:
     def __init__(
         self,
-        transition_model: TransitionModel,
-        tree: ContextDependency,
+        transition_model_path: str,
+        tree_path: str,
         lexicon_compiler: LexiconCompiler,
         transition_scale: float = 0.0,
         self_loop_scale: float = 0.0,
         batch_size: int = 250,
         reorder: bool = True,
     ):
+        self.transition_model = TransitionModel()
+        ReadKaldiObject(str(transition_model_path), self.transition_model)
+        self.tree = ContextDependency()
+        ReadKaldiObject(str(tree_path), self.tree)
         self.lexicon = lexicon_compiler
-        self.transition_model = transition_model
-        self.tree = tree
         self.batch_size = batch_size
         kaldi_fst = pynini_to_kaldi(lexicon_compiler.compile_lexicon())
         self.options = TrainingGraphCompilerOptions(transition_scale, self_loop_scale, reorder)
         self.compiler = _TrainingGraphCompiler(
-            transition_model,
-            tree,
+            self.transition_model,
+            self.tree,
             kaldi_fst,
             lexicon_compiler.disambiguation_symbols,
             self.options,
@@ -43,6 +46,6 @@ class TrainingGraphCompiler:
         writer.Close()
 
     def compile_fst(self, transcript):
-        transcript = [self.lexicon.word_table.find(x) for x in transcript.split()]
+        transcript = [self.lexicon.to_int(x) for x in transcript.split()]
         fst = self.compiler.CompileGraphFromText(transcript)
         return fst

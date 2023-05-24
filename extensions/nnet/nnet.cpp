@@ -2246,10 +2246,6 @@ void pybind_nnet_nnet_trnopts(py::module& m) {
     }
 }
 
-void pybind_nnet_nnet_utils(py::module& m) {
-
-}
-
 void pybind_nnet_nnet_various(py::module& m) {
 
   {
@@ -2459,6 +2455,5 @@ void init_nnet(py::module &_m) {
   pybind_nnet_nnet_recurrent(m);
   pybind_nnet_nnet_sentence_averaging_component(m);
   pybind_nnet_nnet_trnopts(m);
-  pybind_nnet_nnet_utils(m);
   pybind_nnet_nnet_various(m);
 }

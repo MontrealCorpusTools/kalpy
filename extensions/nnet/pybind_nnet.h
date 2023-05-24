@@ -27,7 +27,6 @@ void pybind_nnet_nnet_rbm(py::module &);
 void pybind_nnet_nnet_recurrent(py::module &);
 void pybind_nnet_nnet_sentence_averaging_component(py::module &);
 void pybind_nnet_nnet_trnopts(py::module &);
-void pybind_nnet_nnet_utils(py::module &);
 void pybind_nnet_nnet_various(py::module &);
 
 void init_nnet(py::module &);

@@ -122,13 +122,17 @@ class LexiconCompiler:
         self.pronunciations: typing.List[Pronunciation] = []
         self._fst = None
 
+    def to_int(self, word):
+        if self.word_table.member(word):
+            return self.word_table.find(word)
+        return self.word_table.find(self.oov_word)
+
     @property
     def specials_set(self) -> typing.Set[str]:
         """Special words, like the ``oov_word`` ``silence_word``, ``<s>``, and ``</s>``"""
         return {
             "#0",
             self.silence_word,
-            self.oov_word,
             "<s>",
             "</s>",
         }
@@ -136,19 +140,33 @@ class LexiconCompiler:
     def load_pronunciations(self, file_name: typing.Union[pathlib.Path, str]):
         non_silence_phones = set()
         words = set()
+        oov_found = False
         for pron in parse_dictionary_file(file_name):
             if self.ignore_case:
                 pron.orthography = pron.orthography.lower()
             if pron.orthography in self.specials_set:
                 continue
+            if pron.orthography == self.oov_word:
+                oov_found = True
             phones = pron.pronunciation.split()
             non_silence_phones.update(phones)
             self.pronunciations.append(pron)
             words.add(pron.orthography)
+        if not oov_found:
+            self.pronunciations.append(
+                Pronunciation(
+                    self.oov_word,
+                    self.oov_phone,
+                    1.0,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+            )
         for s in sorted(words):
             self.word_table.add_symbol(s)
         for s in sorted(non_silence_phones):
-            # self.phone_table.add_symbol(s)
             if self.position_dependent_phones:
                 for pos in ["_S", "_B", "_E", "_I"]:
                     self.phone_table.add_symbol(s + pos)
@@ -234,7 +252,6 @@ class LexiconCompiler:
         )
         for pron in self.pronunciations:
             word_symbol = self.word_table.find(pron.orthography)
-            print(pron.orthography, word_symbol)
             phones = pron.pronunciation.split()
             silence_before_cost = (
                 -math.log(pron.silence_before_correct)

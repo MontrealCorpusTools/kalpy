@@ -1,22 +1,15 @@
 import pywrapfst
 
-from _kalpy.hmm import TransitionModel
-from _kalpy.tree import ContextDependency
-from _kalpy.util import ReadKaldiObject
 from kalpy.decoder.training_graphs import TrainingGraphCompiler
 from kalpy.fstext.lexicon import LexiconCompiler
 from kalpy.fstext.utils import kaldi_to_pynini
 
 
 def test_transition_model(tree_path, transition_model_path, dictionary_path, temp_dir):
-    tm = TransitionModel()
-    ReadKaldiObject(str(transition_model_path), tm)
-    tree = ContextDependency()
-    ReadKaldiObject(str(tree_path), tree)
     lc = LexiconCompiler(position_dependent_phones=False)
     lc.load_pronunciations(dictionary_path)
 
-    gc = TrainingGraphCompiler(tm, tree, lc)
+    gc = TrainingGraphCompiler(transition_model_path, tree_path, lc)
     graph = kaldi_to_pynini(gc.compile_fst("this is the acoustic corpus"))
     print(graph)
     assert graph.num_states() > 0

@@ -7,9 +7,10 @@ import librosa
 import numpy as np
 
 from _kalpy import feat
-from _kalpy.matrix import FloatMatrixBase
+from _kalpy.matrix import CompressedMatrix, FloatMatrixBase
 from _kalpy.util import (
     _BaseFloatMatrixWriter,
+    _CompressedMatrixWriter,
     _RandomAccessBaseFloatMatrixReader,
     _SequentialBaseFloatMatrixReader,
 )
@@ -120,10 +121,17 @@ class MfccComputer:
         mfccs = self.mfcc_obj.compute(wave)
         return mfccs
 
-    def export_feats(self, file_name: str, segments: typing.Dict[str, Segment]):
-        writer = _BaseFloatMatrixWriter(f"ark:{file_name}")
+    def export_feats(
+        self, file_name: str, segments: typing.Dict[str, Segment], compress: bool = True
+    ):
+        if compress:
+            writer = _CompressedMatrixWriter(f"ark:{file_name}")
+        else:
+            writer = _BaseFloatMatrixWriter(f"ark:{file_name}")
         for key, segment in segments.items():
             feats = self._compute_mfccs_for_export(segment)
+            if compress:
+                feats = CompressedMatrix(feats)
             writer.Write(key, feats)
         writer.Close()
 
