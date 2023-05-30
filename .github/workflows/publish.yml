@@ -29,7 +29,6 @@ jobs:
           fetch-depth: 0
 
       - name: Install Conda environment with Micromamba
-        id: mamba_setup
         uses: mamba-org/setup-micromamba@v1
         with:
           environment-file: environment.yml
@@ -47,7 +46,7 @@ jobs:
 
       - name: Build a binary wheel and a source tarball
         env:
-          KALDI_ROOT: ${{mamba_setup.outputs.environment-path}}
+          KALDI_ROOT: ~/micromamba/envs/my-env
         shell: bash -l {0}
         run: >-
           python -m
