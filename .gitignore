@@ -133,3 +133,5 @@ dmypy.json
 .vscode/
 
 tests/data/temp/
+
+kalpy/_version.py

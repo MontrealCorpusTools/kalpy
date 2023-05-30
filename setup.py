@@ -134,7 +134,6 @@ long_description = (this_directory / "README.md").read_text()
 # logic and declaration, and simpler if you include description/version in a file.
 setup(
     name="kalpy-kaldi",
-    version="0.0.1",
     author="Michael McAuliffe",
     author_email="michael.e.mcauliffe@gmail.com",
     description="Pybind11 bindings for Kaldi for use with the Montreal Forced Aligner",
@@ -146,4 +145,6 @@ setup(
     zip_safe=False,
     extras_require={"test": ["pytest>=6.0"]},
     python_requires=">=3.7",
+    use_scm_version=True,
+    setup_requires=["setuptools_scm"],
 )
