@@ -46,7 +46,7 @@ jobs:
 
       - name: Build kalpy
         env:
-          CONDA_PREFIX: /usr/share/miniconda3/envs/my-env
+          KALDI_ROOT: /usr/share/miniconda3/envs/my-env
         shell: bash -l {0}
         run: pip install .
 
