@@ -14,7 +14,7 @@ if(KALDI_ROOT)
     include_directories("${KALDI_ROOT}/include")
     include_directories("${KALDI_ROOT}/include/kaldi")
     if (NOT CUDA_TOOLKIT_ROOT_DIR)
-        set(CUDA_TOOLKIT_ROOT_DIR "${CONDA_ROOT}")
+        set(CUDA_TOOLKIT_ROOT_DIR "${KALDI_ROOT}")
     endif()
 
 endif()
