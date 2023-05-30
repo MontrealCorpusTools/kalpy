@@ -1,3 +1,4 @@
+"""Classes for working with lexicons"""
 from __future__ import annotations
 
 import collections
@@ -13,6 +14,10 @@ import pywrapfst
 
 @dataclasses.dataclass
 class Pronunciation:
+    """
+    Data class for storing information about a particular pronunciation
+    """
+
     orthography: str
     pronunciation: str
     probability: typing.Optional[float]
@@ -30,13 +35,13 @@ def parse_dictionary_file(
 
     Parameters
     ----------
-    path: :class:`~pathlib.Path`
+    path: :class:`~pathlib.Path` or str
         Path to lexicon file
 
     Yields
     ------
     str
-        Pronunciation
+        :class:`~kalpy.fstext.lexicon.Pronunciation`
     """
     prob_pattern = re.compile(r"\b\d+\.\d+\b")
     with open(path, encoding="utf8") as f:
@@ -75,6 +80,50 @@ def parse_dictionary_file(
 
 
 class LexiconCompiler:
+    """
+    Class for compiling pronunciation dictionary files to lexicon FSTs
+
+    Parameters
+    ----------
+    silence_disambiguation_symbol: str
+        Disambiguation symbol for use in transcription decoding versus alignment decoding,
+        leave empty to generate a lexicon for training/alignment
+    silence_probability: float
+        Probability of silence following words
+    initial_silence_probability: float
+        Probability of silence at the beginning of utterances
+    final_silence_correction: float
+        Correction factor for utterances ending in silence
+    final_non_silence_correction: float
+        Correction factor for utterances not ending in silence
+    silence_word: str
+        Word symbol to use for silence
+    oov_word: str
+        Word symbol to use for out of vocabulary items
+    silence_phone: str
+        Phone symbol to use for silence
+    oov_phone: str
+        Phone symbol to use for out of vocabulary items
+    position_dependent_phones: bool
+        Flag for using phones based on word position,
+        i.e. "AA_S" (for words with a pronunciation of only "AA"),
+        "AA_B" ("AA" at the beginning of a word),
+        "AA_I" ("AA" internal to  a word),
+        "AA_E" ("AA" at the end of a word)
+        instead of using a single "AA" symbol across all word positions
+    ignore_case: bool
+        Flag for whether word orthographies should be transformed to lower case
+
+    Attributes
+    ----------
+    word_table: :class:`pywrapfst.SymbolTable`
+        Word symbol table
+    phone_table: :class:`pywrapfst.SymbolTable`
+        Phone symbol table
+    pronunciations: list[:class:`~kalpy.fstext.lexicon.Pronunciation`]
+        List of pronunciations loaded from dictionary file
+    """
+
     def __init__(
         self,
         silence_disambiguation_symbol: typing.Optional[str] = None,
@@ -87,7 +136,7 @@ class LexiconCompiler:
         silence_phone: str = "sil",
         oov_phone: str = "spn",
         position_dependent_phones: bool = False,
-        ignore_case=True,
+        ignore_case: bool = True,
     ):
         self.silence_disambiguation_symbol = silence_disambiguation_symbol
         self.silence_probability = silence_probability
@@ -121,8 +170,22 @@ class LexiconCompiler:
                 self.phone_table.add_symbol(oov_phone + pos)
         self.pronunciations: typing.List[Pronunciation] = []
         self._fst = None
+        self._align_fst = None
 
-    def to_int(self, word):
+    def to_int(self, word: str) -> int:
+        """
+        Look up a word in the word symbol table
+
+        Parameters
+        ----------
+        word: str
+            Word to look up
+
+        Returns
+        -------
+        int
+            Integer ID of word in symbol table
+        """
         if self.word_table.member(word):
             return self.word_table.find(word)
         return self.word_table.find(self.oov_word)
@@ -137,7 +200,15 @@ class LexiconCompiler:
             "</s>",
         }
 
-    def load_pronunciations(self, file_name: typing.Union[pathlib.Path, str]):
+    def load_pronunciations(self, file_name: typing.Union[pathlib.Path, str]) -> None:
+        """
+        Load pronunciations from a dictionary file and calculate necessary disambiguation symbols
+
+        Parameters
+        ----------
+        file_name: :class:`~pathlib.Path` or str
+            Path to lexicon file
+        """
         non_silence_phones = set()
         words = set()
         oov_found = False
@@ -179,7 +250,8 @@ class LexiconCompiler:
         self.word_table.add_symbol("</s>")
 
     @property
-    def disambiguation_symbols(self):
+    def disambiguation_symbols(self) -> typing.List[int]:
+        """List of integer IDs for disambiguation symbols in the phone symbol table"""
         return [
             i
             for i in range(self.phone_table.num_symbols())
@@ -187,6 +259,7 @@ class LexiconCompiler:
         ]
 
     def compute_disambiguation_symbols(self):
+        """Calculate the necessary disambiguation symbols for the lexicon"""
         subsequences = set()
         for pron in self.pronunciations:
 
@@ -209,7 +282,9 @@ class LexiconCompiler:
             self.phone_table.add_symbol(p)
         return self.pronunciations
 
-    def compile_lexicon(self) -> pynini.Fst:
+    @property
+    def fst(self) -> pynini.Fst:
+        """Compiled lexicon FST"""
         if self._fst is not None:
             return self._fst
         initial_silence_cost = -1 * math.log(self.initial_silence_probability)
@@ -363,7 +438,11 @@ class LexiconCompiler:
         self._fst = fst
         return self._fst
 
-    def compile_align_lexicon(self):
+    @property
+    def align_fst(self) -> pynini.Fst:
+        """Compiled FST for aligning lattices when `position_dependent_phones` is False"""
+        if self._align_fst is not None:
+            return self._align_fst
         fst = pynini.Fst()
         start_state = fst.add_state()
         loop_state = fst.add_state()
@@ -440,4 +519,5 @@ class LexiconCompiler:
         fst.delete_states([next_state])
         fst.set_final(loop_state, pywrapfst.Weight.one(fst.weight_type()))
         fst.arcsort("olabel")
-        return fst
+        self._align_fst = fst
+        return self._align_fst

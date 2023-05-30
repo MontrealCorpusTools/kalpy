@@ -63,9 +63,9 @@ class CMakeBuild(build_ext):
             # exported for Ninja to pick it up, which is a little tricky to do.
             # Users can override the generator with CMAKE_GENERATOR in CMake
             # 3.15+.
-            conda_root = os.environ.get("CONDA_PREFIX", None)
-            if conda_root:
-                cmake_args += [f"-DCONDA_ROOT={conda_root}"]
+            kaldi_root = os.environ.get("KALDI_ROOT", None)
+            if kaldi_root:
+                cmake_args += [f"-DKALDI_ROOT={kaldi_root}"]
             if not cmake_generator or cmake_generator == "Ninja":
                 try:
                     import ninja
@@ -81,10 +81,10 @@ class CMakeBuild(build_ext):
         else:
             cmake_args += ["-GNinja"]
             # Single config generators are handled "normally"
-            conda_root = os.environ.get("CONDA_PREFIX", None)
-            if conda_root:
-                conda_root = conda_root.replace("\\", "/")
-                cmake_args += [f"-DCONDA_ROOT={conda_root}/Library"]
+            kaldi_root = os.environ.get("KALDI_ROOT", None)
+            if kaldi_root:
+                kaldi_root = kaldi_root.replace("\\", "/")
+                cmake_args += [f"-DKALDI_ROOT={kaldi_root}"]
             single_config = any(x in cmake_generator for x in {"NMake", "Ninja"})
 
             # CMake allows an arch-in-generator style for backward compatibility
@@ -127,15 +127,19 @@ class CMakeBuild(build_ext):
         subprocess.run(["cmake", "--build", ".", *build_args], cwd=build_temp, check=True)
 
 
+this_directory = Path(__file__).parent
+long_description = (this_directory / "README.md").read_text()
+
 # The information here can also be placed in setup.cfg - better separation of
 # logic and declaration, and simpler if you include description/version in a file.
 setup(
-    name="kalpy",
-    version="5.5.1068",
+    name="kalpy-kaldi",
+    version="0.0.1",
     author="Michael McAuliffe",
     author_email="michael.e.mcauliffe@gmail.com",
-    description="Pybind11 bindings for Kaldi",
-    long_description="",
+    description="Pybind11 bindings for Kaldi for use with the Montreal Forced Aligner",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
     ext_modules=[CMakeExtension("_kalpy")],
     packages=find_packages(exclude=["scripts", "tests"]),
     cmdclass={"build_ext": CMakeBuild},

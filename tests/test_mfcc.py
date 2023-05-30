@@ -1,3 +1,5 @@
+import os
+
 from kalpy.feat.mfcc import FeatureArchive, MfccComputer, Segment
 
 
@@ -19,6 +21,19 @@ def test_export_mfcc(wav_path, temp_dir):
     assert output_file_name.exists()
 
     archive = FeatureArchive(output_file_name)
+    for utt, mfccs in archive:
+        assert utt == "1"
+        assert mfccs.shape[0] == 100
+        assert mfccs.shape[1] == 13
+    mfccs = archive["1"]
+    assert mfccs.shape[0] == 100
+    assert mfccs.shape[1] == 13
+
+    os.remove(output_file_name)
+    feature_generator.export_feats(output_file_name, segments, write_scp=True, compress=True)
+    assert output_file_name.with_suffix(".scp").exists()
+
+    archive = FeatureArchive(output_file_name.with_suffix(".scp"))
     for utt, mfccs in archive:
         assert utt == "1"
         assert mfccs.shape[0] == 100

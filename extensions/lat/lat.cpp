@@ -1164,20 +1164,20 @@ void pybind_kaldi_lattice(py::module& m) {
     // TODO(fangjun): other methods can be wrapped when needed
   }
 
-  pybind_sequential_table_reader<LatticeHolder>(m, "_SequentialLatticeReader");
+  pybind_sequential_table_reader<LatticeHolder>(m, "SequentialLatticeReader");
 
   pybind_random_access_table_reader<LatticeHolder>(
-      m, "_RandomAccessLatticeReader");
+      m, "RandomAccessLatticeReader");
 
-  pybind_table_writer<LatticeHolder>(m, "_LatticeWriter");
+  pybind_table_writer<LatticeHolder>(m, "LatticeWriter");
 
   pybind_sequential_table_reader<CompactLatticeHolder>(
-      m, "_SequentialCompactLatticeReader");
+      m, "SequentialCompactLatticeReader");
 
   pybind_random_access_table_reader<CompactLatticeHolder>(
-      m, "_RandomAccessCompactLatticeReader");
+      m, "RandomAccessCompactLatticeReader");
 
-  pybind_table_writer<CompactLatticeHolder>(m, "_CompactLatticeWriter");
+  pybind_table_writer<CompactLatticeHolder>(m, "CompactLatticeWriter");
 }
 
 

@@ -355,10 +355,10 @@ void init_feat(py::module &_m) {
       .def("Read", &WaveData::Read)
       .def("Swap", &WaveData::Swap);
 
-  pybind_sequential_table_reader<WaveHolder>(m, "_SequentialWaveReader");
-  pybind_sequential_table_reader<WaveInfoHolder>(m, "_SequentialWaveInfoReader");
-  pybind_random_access_table_reader<WaveHolder>(m, "_RandomAccessWaveReader");
-  pybind_random_access_table_reader<WaveInfoHolder>(m, "_RandomAccessWaveInfoReader");
+  pybind_sequential_table_reader<WaveHolder>(m, "SequentialWaveReader");
+  pybind_sequential_table_reader<WaveInfoHolder>(m, "SequentialWaveInfoReader");
+  pybind_random_access_table_reader<WaveHolder>(m, "RandomAccessWaveReader");
+  pybind_random_access_table_reader<WaveInfoHolder>(m, "RandomAccessWaveInfoReader");
   feat_pitch_functions(m);
   feat_signal(m);
 }

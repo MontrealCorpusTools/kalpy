@@ -162,33 +162,33 @@ void init_util(py::module &_m) {
 
 
   pybind_sequential_table_reader<KaldiObjectHolder<Matrix<float>>>(
-      m, "_SequentialBaseFloatMatrixReader");
+      m, "SequentialBaseFloatMatrixReader");
 
   pybind_random_access_table_reader<KaldiObjectHolder<Matrix<float>>>(
-      m, "_RandomAccessBaseFloatMatrixReader");
+      m, "RandomAccessBaseFloatMatrixReader");
 
   pybind_table_writer<KaldiObjectHolder<Matrix<float>>>(
-      m, "_BaseFloatMatrixWriter");
+      m, "BaseFloatMatrixWriter");
 
   pybind_sequential_table_reader<KaldiObjectHolder<Vector<float>>>(
-      m, "_SequentialBaseFloatVectorReader");
+      m, "SequentialBaseFloatVectorReader");
 
   pybind_random_access_table_reader<KaldiObjectHolder<Vector<float>>>(
-      m, "_RandomAccessBaseFloatVectorReader");
+      m, "RandomAccessBaseFloatVectorReader");
 
   pybind_table_writer<KaldiObjectHolder<Vector<float>>>(
-      m, "_BaseFloatVectorWriter");
+      m, "BaseFloatVectorWriter");
 
   pybind_table_writer<KaldiObjectHolder<CompressedMatrix>>(
-      m, "_CompressedMatrixWriter");
+      m, "CompressedMatrixWriter");
 
   pybind_sequential_table_reader<BasicVectorHolder<int32>>(
-      m, "_SequentialInt32VectorReader");
+      m, "SequentialInt32VectorReader");
 
   pybind_random_access_table_reader<BasicVectorHolder<int32>>(
-      m, "_RandomAccessInt32VectorReader");
+      m, "RandomAccessInt32VectorReader");
 
-  pybind_table_writer<BasicVectorHolder<int32>>(m, "_Int32VectorWriter");
+  pybind_table_writer<BasicVectorHolder<int32>>(m, "Int32VectorWriter");
     pybind_read_kaldi_object<TransitionModel>(m);
     pybind_read_kaldi_object<ContextDependency>(m);
 

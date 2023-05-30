@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import pathlib
 import typing
 
 import librosa
@@ -9,15 +10,19 @@ import numpy as np
 from _kalpy import feat
 from _kalpy.matrix import CompressedMatrix, FloatMatrixBase
 from _kalpy.util import (
-    _BaseFloatMatrixWriter,
-    _CompressedMatrixWriter,
-    _RandomAccessBaseFloatMatrixReader,
-    _SequentialBaseFloatMatrixReader,
+    BaseFloatMatrixWriter,
+    CompressedMatrixWriter,
+    RandomAccessBaseFloatMatrixReader,
+    SequentialBaseFloatMatrixReader,
 )
 
 
 @dataclasses.dataclass
 class Segment:
+    """
+    Data class for information about acoustic segments
+    """
+
     file_path: str
     begin: typing.Optional[float] = None
     end: typing.Optional[float] = None
@@ -25,6 +30,62 @@ class Segment:
 
 
 class MfccComputer:
+    """
+    Class for computing MFCC features
+
+    Parameters
+    ----------
+    sample_frequency: float
+        Sample rate to use in generating features, audio will be resampled as necessary,
+        defaults to 16000
+    frame_length: int
+        Frame length in milliseconds, defaults to 25
+    frame_shift: int
+        Frame shift in milliseconds, defaults to 10
+    dither: float
+        Dithering to use for generating deterministic features while avoiding numerical zeros,
+        defaults to -1
+    preemphasis_coefficient: float
+        Pre-emphasis coefficient to use prior to feature calculation, defaults to 0.97
+    remove_dc_offset: bool
+        Flag for removing DC offset, defaults to True
+    window_type: str
+        Type of window to use in generating frames, defaults to "povey"
+    round_to_power_of_two: bool
+        Flag for using a window based on the power of two in FFT calculation for efficiency,
+        defaults to True
+    blackman_coeff: float
+        Coefficient to use when `window_type` is "blackman", defaults to 0.42
+    snip_edges: bool
+        Flag for whether edges of segments should be cutoff to ensure no zero padding in frames,
+        defaults to True
+    max_feature_vectors: int
+        Maximum number of vectors to store in memory for VTLN calculation, defaults to -1
+    num_mel_bins: int
+        Number of mel frequency bins to use in calculating MFCCs, defaults to 23
+    low_frequency: float
+        Lowest frequency for the mel spectrum, defaults to 20
+    high_frequency: float
+        Highest frequency for the mel spectrum, defaults to 7800
+    vtln_low: float
+        VTLN lower cutoff of warping function, defaults to 100
+    vtln_high: float
+        VTLN upper cutoff of warping function if negative,
+        added to the Nyquist frequency to get the cutoff, defaults to -500
+    num_coefficients: int
+        Number of MFCC coefficients, defaults to 13
+    use_energy: bool
+        Use energy of frame in place of the zeroth MFCC coefficient, defaults to True
+    energy_floor: float
+        Energy floor for MFCC, defaults to 0, set to 1.0 or 0.1 if dithering is disabled
+    raw_energy: bool
+        Flag for computing energy before pre-emphasis and windowing, defaults to True
+    cepstral_lifter: float
+        Scaling factor on cepstra for HTK compatibility, defaults to 22.0
+    htk_compatibility: bool
+        Flag for generating features in HTK format
+    """
+
     def __init__(
         self,
         sample_frequency: float = 16000,
@@ -35,7 +96,7 @@ class MfccComputer:
         remove_dc_offset: bool = True,
         window_type: str = "povey",
         round_to_power_of_two: bool = True,
-        blackman_coeff=0.42,
+        blackman_coeff: float = 0.42,
         snip_edges: bool = True,
         max_feature_vectors: int = -1,
         num_mel_bins: int = 25,
@@ -83,6 +144,19 @@ class MfccComputer:
         self,
         segment: Segment,
     ) -> np.ndarray:
+        """
+        Compute MFCC features for a segment
+
+        Parameters
+        ----------
+        segment: :class:`~kalpy.feat.mfcc.Segment`
+            Acoustic segment to generate MFCCs
+
+        Returns
+        -------
+        :class:`numpy.ndarray`
+            Feature matrix for the segment
+        """
         duration = None
         if segment.end is not None and segment.begin is not None:
             duration = segment.end - segment.begin
@@ -104,6 +178,19 @@ class MfccComputer:
         self,
         segment: Segment,
     ) -> FloatMatrixBase:
+        """
+        Generate MFCCs for exporting to a kaldi archive
+
+        Parameters
+        ----------
+        segment: :class:`~kalpy.feat.mfcc.Segment`
+            Acoustic segment to generate MFCCs
+
+        Returns
+        -------
+        :class:`_kalpy.matrix.FloatMatrixBase`
+            Feature matrix for the segment
+        """
         duration = None
         if segment.end is not None and segment.begin is not None:
             duration = segment.end - segment.begin
@@ -122,26 +209,64 @@ class MfccComputer:
         return mfccs
 
     def export_feats(
-        self, file_name: str, segments: typing.Dict[str, Segment], compress: bool = True
-    ):
-        if compress:
-            writer = _CompressedMatrixWriter(f"ark:{file_name}")
+        self,
+        file_name: str,
+        segments: typing.Dict[str, Segment],
+        write_scp: bool = False,
+        compress: bool = True,
+    ) -> None:
+        """
+        Export features to a kaldi archive file (i.e., mfccs.ark)
+
+        Parameters
+        ----------
+        file_name: :class:`~pathlib.Path` or str
+            Archive file path to export to
+        segments: dict[str, :class:`kalpy.feat.mfcc.Segment`]
+            Mapping of utterance IDs to Segment objects
+        write_scp: bool
+            Flag for whether an SCP file should be generated as well
+        compress: bool
+            Flag for whether to export features as a compressed archive
+        """
+        file_name = str(file_name)
+        if not file_name.endswith(".ark"):
+            file_name += ".ark"
+        if write_scp:
+            write_specifier = f"ark,scp:{file_name},{file_name.replace('.ark', '.scp')}"
         else:
-            writer = _BaseFloatMatrixWriter(f"ark:{file_name}")
+            write_specifier = f"ark:{file_name}"
+        if compress:
+            writer = CompressedMatrixWriter(write_specifier)
+        else:
+            writer = BaseFloatMatrixWriter(write_specifier)
         for key, segment in segments.items():
             feats = self._compute_mfccs_for_export(segment)
             if compress:
                 feats = CompressedMatrix(feats)
-            writer.Write(key, feats)
+            writer.Write(str(key), feats)
         writer.Close()
 
 
 class FeatureArchive:
-    def __init__(self, file_name):
-        self.file_name = file_name
+    """
+    Class for reading an archive or SCP of features
 
-    def __iter__(self):
-        reader = _SequentialBaseFloatMatrixReader(f"ark:{self.file_name}")
+    Parameters
+    ----------
+    file_name: :class:`~pathlib.Path` or str
+        Path to archive or SCP file to read from
+    """
+
+    def __init__(self, file_name: typing.Union[pathlib.Path, str]):
+        self.file_name = str(file_name)
+        self.read_identifier = "ark"
+        if self.file_name.endswith(".scp"):
+            self.read_identifier = "scp"
+
+    def __iter__(self) -> typing.Generator[typing.Tuple[str, np.ndarray]]:
+        """Iterate over the utterance features in the archive"""
+        reader = SequentialBaseFloatMatrixReader(f"{self.read_identifier}:{self.file_name}")
         try:
             while not reader.Done():
                 utt = reader.Key()
@@ -151,8 +276,10 @@ class FeatureArchive:
         finally:
             reader.Close()
 
-    def __getitem__(self, item):
-        reader = _RandomAccessBaseFloatMatrixReader(f"ark:{self.file_name}")
+    def __getitem__(self, item: str) -> np.ndarray:
+        """Get features for a particular key from the archive file"""
+        item = str(item)
+        reader = RandomAccessBaseFloatMatrixReader(f"{self.read_identifier}:{self.file_name}")
         try:
             if not reader.HasKey(item):
                 raise Exception(f"No key {item} found in {self.file_name}")
