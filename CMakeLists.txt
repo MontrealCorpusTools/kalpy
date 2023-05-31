@@ -92,6 +92,7 @@ pybind11_add_module(_kalpy extensions/_kalpy.cpp
                             )
 target_link_libraries(_kalpy PUBLIC kaldi-base kaldi-chain
                                     kaldi-matrix
+                                    kaldi-cudamatrix
                                     kaldi-hmm
                                     kaldi-online kaldi-online2 kaldi-rnnlm
                                     kaldi-nnet3
@@ -110,7 +111,6 @@ target_link_libraries(_kalpy PUBLIC kaldi-base kaldi-chain
 if(CUDA_FOUND)
 
 target_link_libraries(_kalpy PUBLIC kaldi-cudadecoder kaldi-cudafeat
-                                    kaldi-cudamatrix
                                     )
 endif()
 target_compile_definitions(_kalpy
