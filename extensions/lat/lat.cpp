@@ -1051,7 +1051,7 @@ void pybind_determinize_lattice_pruned(py::module& m) {
         py::arg("prune"),
         py::arg("ofst"),
         py::arg("opts")= DeterminizeLatticePhonePrunedOptions());
-  m.def("DeterminizeLatticeInsertPhones",
+  /*m.def("DeterminizeLatticeInsertPhones",
         &DeterminizeLatticeInsertPhones<kaldi::LatticeWeight>,
         "This function takes in lattices and inserts phones at phone boundaries. It "
         "uses the transition model to work out the transition_id to phone map. The "
@@ -1062,6 +1062,7 @@ void pybind_determinize_lattice_pruned(py::module& m) {
         "works out the phones according to this value.",
         py::arg("trans_model"),
         py::arg("fst"));
+      */
   m.def("DeterminizeLatticeDeletePhones",
         &DeterminizeLatticeDeletePhones<kaldi::LatticeWeight>,
         "This function takes in lattices and deletes \"phones\" from them. The \"phones\" "

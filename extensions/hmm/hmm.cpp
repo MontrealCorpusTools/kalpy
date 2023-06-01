@@ -97,7 +97,7 @@ void init_hmm(py::module &_m) {
            py::arg("ctx_dep"), py::arg("hmm_topo"))
      .def_static("read_from_file", [](std::string file_path) {
 
-               TransitionModel trans_model;
+               static TransitionModel trans_model;
                ReadKaldiObject(file_path, &trans_model);
                return &trans_model;
           }, py::return_value_policy::reference)

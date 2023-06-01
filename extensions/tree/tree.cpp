@@ -988,7 +988,7 @@ void pybind_context_dep(py::module& m) {
            py::arg("P"), py::arg("to_pdf"))
         .def_static("read_from_file",[](const std::string file_path){
 
-                  ContextDependency ctx_dep;
+                  static ContextDependency ctx_dep;
                   ReadKaldiObject(file_path, &ctx_dep);
                   return &ctx_dep;
               }, py::arg("file_path"))
