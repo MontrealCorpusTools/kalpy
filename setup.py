@@ -57,6 +57,17 @@ class CMakeBuild(build_ext):
 
         # In this example, we pass in the version to C++. You might not need to.
 
+        if not cmake_generator or cmake_generator == "Ninja":
+            try:
+                import ninja
+
+                ninja_executable_path = Path(ninja.BIN_DIR) / "ninja"
+                cmake_args += [
+                    "-GNinja",
+                    f"-DCMAKE_MAKE_PROGRAM:FILEPATH={ninja_executable_path}",
+                ]
+            except ImportError:
+                pass
         if self.compiler.compiler_type != "msvc":
             # Using Ninja-build since it a) is available as a wheel and b)
             # multithreads automatically. MSVC would require all variables be
@@ -66,20 +77,8 @@ class CMakeBuild(build_ext):
             kaldi_root = os.environ.get("KALDI_ROOT", None)
             if kaldi_root:
                 cmake_args += [f"-DKALDI_ROOT={kaldi_root}"]
-            if not cmake_generator or cmake_generator == "Ninja":
-                try:
-                    import ninja
-
-                    ninja_executable_path = Path(ninja.BIN_DIR) / "ninja"
-                    cmake_args += [
-                        "-GNinja",
-                        f"-DCMAKE_MAKE_PROGRAM:FILEPATH={ninja_executable_path}",
-                    ]
-                except ImportError:
-                    pass
 
         else:
-            cmake_args += ["-GNinja"]
             # Single config generators are handled "normally"
             kaldi_root = os.environ.get("KALDI_ROOT", None)
             if kaldi_root:
