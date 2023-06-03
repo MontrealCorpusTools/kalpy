@@ -9,11 +9,11 @@ Kalpy depends on Kaldi being built as shared libraries, and the easiest way to i
 conda install -c conda-forge kalpy
 ```
 
-Kalpy is also available on pip via the mfa-kaldi package, but as this is only a binding library, it relies on Kaldi shared libraries being available. The `KALDI_ROOT` environment variable must be set to locate the shared libraries and header files.  The easiest way to install the appropriately built kaldi libraries is via `conda install -c conda-forge kaldi`.
+Kalpy is also available on pip via the `kalpy-kaldi` package, but as this is only a binding library, it relies on Kaldi shared libraries being available. The `KALDI_ROOT` environment variable must be set to locate the shared libraries and header files.  The easiest way to install the appropriately built kaldi libraries is via `conda install -c conda-forge kaldi`.
 
 ```
 export KALDI_ROOT=/path/to/conda/enviornment
-pip install mfa-kaldi
+pip install kalpy-kaldi
 ```
 
 ## Usage
