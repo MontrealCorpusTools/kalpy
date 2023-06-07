@@ -50,19 +50,7 @@ if (MSVC)
      set(CMAKE_INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib;$ORIGIN/../../tools/openfst/lib")
 endif ()
 
-#find_package(CUDAToolkit)
-#find_package(CUDA)
-#if(CUDA_FOUND)
-#    add_definitions(-DHAVE_CUDA=1)
-#else()
-#   add_definitions(-DHAVE_CUDA=0)
-#endif()
 find_package(CUDA)
-
-if(CUDA_FOUND)
-
-#add_definitions(-DHAVE_CUDA=1)
-endif()
 
 find_package(pybind11 REQUIRED)
 include_directories(extensions)
@@ -110,7 +98,7 @@ target_link_libraries(_kalpy PUBLIC kaldi-base kaldi-chain
 
 if(CUDA_FOUND)
 
-target_link_libraries(_kalpy PUBLIC kaldi-cudadecoder kaldi-cudafeat
+   target_link_libraries(_kalpy PUBLIC kaldi-cudadecoder kaldi-cudafeat
                                     )
 endif()
 target_compile_definitions(_kalpy

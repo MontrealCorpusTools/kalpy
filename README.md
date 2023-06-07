@@ -1,5 +1,5 @@
 # kalpy
-Pybind11 bindings for Kaldi for use in [Montreal Forced Aligner](montreal-forced-aligner.readthedocs.io/)
+Pybind11 bindings for Kaldi for use in [Montreal Forced Aligner](montreal-forced-aligner.readthedocs.io/).
 
 ## Installation
 
