@@ -165,6 +165,16 @@ void pybind_kaldi_matrix(py::module& m) {
       py::call_guard<py::gil_scoped_release>())
       .def("Write", &Matrix<float>::Write, py::arg("out"), py::arg("binary"),
       py::call_guard<py::gil_scoped_release>())
+      .def("Resize", &Matrix<float>::Resize,
+           "Set vector to a specified size (can be zero). "
+          "The value of the new data depends on resize_type: "
+          "  -if kSetZero, the new data will be zero "
+          "  -if kUndefined, the new data will be undefined "
+          "  -if kCopyData, the new data will be the same as the old data in any "
+          "     shared positions, and zero elsewhere. "
+          "This function takes time proportional to the number of data elements.",
+           py::arg("r"),
+           py::arg("c"), py::arg("resize_type") = kSetZero, py::arg("stride_type") = kDefaultStride)
       .def("from_numpy",[](
         Matrix<float> &M,
         py::array_t<float> array
@@ -339,6 +349,16 @@ void pybind_kaldi_matrix(py::module& m) {
       py::call_guard<py::gil_scoped_release>())
       .def("Write", &Matrix<double>::Write, py::arg("out"), py::arg("binary"),
       py::call_guard<py::gil_scoped_release>())
+      .def("Resize", &Matrix<double>::Resize,
+           "Set vector to a specified size (can be zero). "
+          "The value of the new data depends on resize_type: "
+          "  -if kSetZero, the new data will be zero "
+          "  -if kUndefined, the new data will be undefined "
+          "  -if kCopyData, the new data will be the same as the old data in any "
+          "     shared positions, and zero elsewhere. "
+          "This function takes time proportional to the number of data elements.",
+           py::arg("r"),
+           py::arg("c"), py::arg("resize_type") = kSetZero, py::arg("stride_type") = kDefaultStride)
       .def("from_numpy",[](
         Matrix<double> &M,
         py::array_t<double> array
@@ -520,6 +540,16 @@ void pybind_kaldi_vector(py::module& m) {
         "Add vector : *this = *this + alpha * rv (with casting between floats and doubles)",
         py::arg("alpha"),
         py::arg("v"),
+      py::call_guard<py::gil_scoped_release>())
+      .def("CopyFromVec",
+        [](
+          VectorBase<float> &v,
+          const VectorBase<float> &other
+        ){
+          v.CopyFromVec(other);
+        },
+        "Copy data from another vector (must match own size).",
+        py::arg("other"),
       py::call_guard<py::gil_scoped_release>())
       /*.def("AddVec2",
         py::overload_cast<const float, const VectorBase<float> &>(&VectorBase<float>::AddVec2<float>),
@@ -932,6 +962,16 @@ void pybind_kaldi_vector(py::module& m) {
         "Add vector : *this = *this + alpha * rv (with casting between floats and doubles)",
         py::arg("alpha"),
         py::arg("v"),
+      py::call_guard<py::gil_scoped_release>())
+      .def("CopyFromVec",
+        [](
+          VectorBase<double> &v,
+          const VectorBase<double> &other
+        ){
+          v.CopyFromVec(other);
+        },
+        "Copy data from another vector (must match own size).",
+        py::arg("other"),
       py::call_guard<py::gil_scoped_release>())
       /*.def("AddVec2",
         py::overload_cast<const double, const VectorBase<double> &>(&VectorBase<double>::AddVec2<double>),

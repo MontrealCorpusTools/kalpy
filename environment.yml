@@ -17,6 +17,7 @@ dependencies:
   - pip
   - dataclassy
   - praatio
+  - pytest-order
   - pip:
       - build
       - twine
