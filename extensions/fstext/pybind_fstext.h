@@ -28,7 +28,7 @@ public:
     using Fst<A>::Fst;
 
     //Trampoline (need one for each virtual function)
-    fst::Fst<A>::StateId Start() const override {
+    typename Fst<A>::StateId Start() const override {
         PYBIND11_OVERRIDE_PURE(
             int, //Return type (ret_type)
             Fst<A>,      //Parent class (cname)
@@ -37,7 +37,7 @@ public:
         );
     }
 
-    fst::Fst<A>::Weight Final(fst::Fst<A>::StateId s) const override {
+    typename Fst<A>::Weight Final(Fst<A>::StateId s) const override {
         PYBIND11_OVERRIDE_PURE(
             Fst<A>::Weight, //Return type (ret_type)
             Fst<A>,      //Parent class (cname)
@@ -46,7 +46,7 @@ public:
         );
     }
 
-    size_t NumArcs(fst::Fst<A>::StateId s) const override {
+    size_t NumArcs(Fst<A>::StateId s) const override {
         PYBIND11_OVERRIDE_PURE(
             size_t, //Return type (ret_type)
             Fst<A>,      //Parent class (cname)
@@ -55,7 +55,7 @@ public:
         );
     }
 
-    size_t NumInputEpsilons(fst::Fst<A>::StateId s) const override {
+    size_t NumInputEpsilons(Fst<A>::StateId s) const override {
         PYBIND11_OVERRIDE_PURE(
             size_t, //Return type (ret_type)
             Fst<A>,      //Parent class (cname)
@@ -64,7 +64,7 @@ public:
         );
     }
 
-    size_t NumOutputEpsilons(fst::Fst<A>::StateId s) const override {
+    size_t NumOutputEpsilons(Fst<A>::StateId s) const override {
         PYBIND11_OVERRIDE_PURE(
             size_t, //Return type (ret_type)
             Fst<A>,      //Parent class (cname)
