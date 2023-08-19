@@ -39,7 +39,7 @@ public:
 
     typename Fst<A>::Weight Final(typename Fst<A>::StateId s) const override {
         PYBIND11_OVERRIDE_PURE(
-            Fst<A>::Weight, //Return type (ret_type)
+            typename Fst<A>::Weight, //Return type (ret_type)
             Fst<A>,      //Parent class (cname)
             Final,          //Name of function in C++ (must match Python name) (fn)
             s      //Argument(s) (...)
@@ -182,7 +182,7 @@ public:
 
     typename ExpandedFst<A>::StateId NumStates() const override {
         PYBIND11_OVERRIDE_PURE(
-            ExpandedFst<A>::StateId, //Return type (ret_type)
+            typename ExpandedFst<A>::StateId, //Return type (ret_type)
             ExpandedFst<A>,      //Parent class (cname)
             NumStates        //Name of function in C++ (must match Python name) (fn)
                   //Argument(s) (...)
@@ -298,7 +298,7 @@ public:
 
     typename MutableFst<A>::Weight Final(typename MutableFst<A>::StateId s) const override {
         PYBIND11_OVERRIDE_PURE(
-            MutableFst<A>::Weight, //Return type (ret_type)
+            typename MutableFst<A>::Weight, //Return type (ret_type)
             MutableFst<A>,      //Parent class (cname)
             Final,          //Name of function in C++ (must match Python name) (fn)
             s      //Argument(s) (...)
@@ -406,7 +406,7 @@ public:
 
     typename MutableFst<A>::StateId NumStates() const override {
         PYBIND11_OVERRIDE_PURE(
-            MutableFst<A>::StateId, //Return type (ret_type)
+            typename MutableFst<A>::StateId, //Return type (ret_type)
             MutableFst<A>,      //Parent class (cname)
             NumStates        //Name of function in C++ (must match Python name) (fn)
                   //Argument(s) (...)
@@ -451,7 +451,7 @@ public:
 
     typename MutableFst<A>::StateId AddState() override {
         PYBIND11_OVERRIDE_PURE(
-            MutableFst<A>::StateId, //Return type (ret_type)
+            typename MutableFst<A>::StateId, //Return type (ret_type)
             MutableFst<A>,      //Parent class (cname)
             SetProperties          //Name of function in C++ (must match Python name) (fn)
                  //Argument(s) (...)
@@ -476,7 +476,7 @@ public:
         );
     }
 
-    void DeleteStates(const std::vector<MutableFst<A>::StateId> & s) override {
+    void DeleteStates(const std::vector<typename MutableFst<A>::StateId> & s) override {
         PYBIND11_OVERRIDE_PURE(
             void, //Return type (ret_type)
             MutableFst<A>,      //Parent class (cname)
