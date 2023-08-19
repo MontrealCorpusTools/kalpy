@@ -1,5 +1,6 @@
-import dataclasses
 import typing
+
+import dataclassy
 
 from _kalpy.feat import (
     DeltaFeaturesOptions,
@@ -16,7 +17,7 @@ from kalpy.feat.mfcc import MfccComputer
 from kalpy.feat.pitch import PitchComputer
 
 
-@dataclasses.dataclass
+@dataclassy.dataclass
 class Utterance:
     segment: Segment
     transcript: str

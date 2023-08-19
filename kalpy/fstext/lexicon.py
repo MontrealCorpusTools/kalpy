@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 import collections
-import dataclasses
 import math
 import pathlib
 import re
 import typing
 
+import dataclassy
 import pynini
 import pywrapfst
 
@@ -17,7 +17,7 @@ from kalpy.exceptions import PhonesToPronunciationsError
 from kalpy.gmm.data import CtmInterval, HierarchicalCtm, WordCtmInterval
 
 
-@dataclasses.dataclass
+@dataclassy.dataclass
 class Pronunciation:
     """
     Data class for storing information about a particular pronunciation

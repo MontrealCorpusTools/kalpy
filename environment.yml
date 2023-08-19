@@ -16,6 +16,7 @@ dependencies:
   - pytest
   - pip
   - dataclassy
+  - praatio
   - pip:
       - build
       - twine

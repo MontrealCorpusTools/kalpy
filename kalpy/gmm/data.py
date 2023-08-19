@@ -1,7 +1,6 @@
 """Data classes for GMM"""
 from __future__ import annotations
 
-import dataclasses
 import pathlib
 import sys
 import typing
@@ -107,7 +106,7 @@ class CtmInterval:
         return Interval(round(self.begin, 6), end, self.label)
 
 
-@dataclasses.dataclass
+@dataclassy.dataclass
 class WordCtmInterval:
     label: str
     symbol: int
@@ -149,7 +148,7 @@ class WordCtmInterval:
         return Interval(round(self.begin, 6), end, self.label)
 
 
-@dataclasses.dataclass
+@dataclassy.dataclass
 class HierarchicalCtm:
     word_intervals: typing.List[WordCtmInterval]
     text: str = None

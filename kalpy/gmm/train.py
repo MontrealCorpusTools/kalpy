@@ -4,7 +4,6 @@ from __future__ import annotations
 import logging
 import pathlib
 import typing
-from contextlib import redirect_stderr, redirect_stdout
 
 from _kalpy import gmm, hmm, tree
 from _kalpy.matrix import DoubleVector
@@ -44,11 +43,10 @@ class GmmStatsAccumulator:
                 continue
             if callback:
                 callback(alignment.utterance_id)
-            with (redirect_stdout(logger), redirect_stderr(logger)):
-                tot_like_this_file = self.gmm_accs.acc_stats(
-                    self.acoustic_model, self.transition_model, alignment.alignment, feats
-                )
-                self.transition_model.acc_stats(alignment.alignment, self.transition_accs)
+            tot_like_this_file = self.gmm_accs.acc_stats(
+                self.acoustic_model, self.transition_model, alignment.alignment, feats
+            )
+            self.transition_model.acc_stats(alignment.alignment, self.transition_accs)
             self.num_done += 1
             tot_like += tot_like_this_file
             tot_t += len(alignment.alignment)
@@ -116,17 +114,16 @@ class TreeStatsAccumulator:
                 continue
             if callback:
                 callback(alignment.utterance_id)
-            with redirect_stdout(logger), redirect_stderr(logger):
-                stats = hmm.accumulate_tree_stats(
-                    self.transition_model, self.tree_stats_info, alignment.alignment, feats
-                )
-                for e, c in stats:
-                    e = tuple(e)
-                    if e not in self.tree_stats:
-                        self.tree_stats[e] = c
-                    else:
-                        self.tree_stats[e].Add(c)
-                num_done += 1
+            stats = hmm.accumulate_tree_stats(
+                self.transition_model, self.tree_stats_info, alignment.alignment, feats
+            )
+            for e, c in stats:
+                e = tuple(e)
+                if e not in self.tree_stats:
+                    self.tree_stats[e] = c
+                else:
+                    self.tree_stats[e].Add(c)
+            num_done += 1
         logger.info(f"Done {num_done} files.")
 
     def export_stats(
