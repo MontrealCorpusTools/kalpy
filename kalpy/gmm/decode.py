@@ -36,8 +36,6 @@ class GmmDecoder:
         acoustic_model_path: typing.Union[pathlib.Path, str],
         hclg_fst: ConstFst,
         acoustic_scale: float = 0.1,
-        transition_scale: float = 1.0,
-        self_loop_scale: float = 1.0,
         beam: float = 16.0,
         lattice_beam: float = 10.0,
         max_active: int = 7000,
@@ -48,14 +46,23 @@ class GmmDecoder:
         hash_ratio: float = 2.0,
         prune_scale: float = 0.1,
         allow_partial: bool = True,
+        fast: bool = False,
     ):
         self.acoustic_model_path = acoustic_model_path
         self.transition_model, self.acoustic_model = read_gmm_model(self.acoustic_model_path)
         self.hclg_fst = hclg_fst
         self.acoustic_scale = acoustic_scale
-        self.transition_scale = transition_scale
-        self.self_loop_scale = self_loop_scale
         self.allow_partial = allow_partial
+        self.beam = beam
+        self.lattice_beam = lattice_beam
+        self.max_active = max_active
+        self.min_active = min_active
+        self.prune_interval = prune_interval
+        self.determinize_lattice = determinize_lattice
+        self.beam_delta = beam_delta
+        self.hash_ratio = hash_ratio
+        self.prune_scale = prune_scale
+        self.fast = fast
 
         self.config = LatticeFasterDecoderConfig()
         self.config.beam = beam
@@ -114,6 +121,9 @@ class GmmDecoder:
             logger.warning(f"Error getting best path from decoder for utterance {utterance_id}")
         alignment, words, weight = GetLinearSymbolSequence(decoded)
         likelihood = -(weight.Value1() + weight.Value2()) / self.acoustic_scale
+        if self.fast:
+            return Alignment(utterance_id, alignment, words, likelihood)
+
         self.num_done += 1
         self.total_likelihood += likelihood
         self.total_frames += len(alignment)
@@ -231,13 +241,7 @@ class GmmRescorer:
         lattice_beam: float = 6.0,
     ):
         self.acoustic_model_path = acoustic_model_path
-        ki = Input()
-        ki.Open(str(acoustic_model_path), True)
-        self.transition_model = TransitionModel()
-        self.transition_model.Read(ki.Stream(), True)
-        self.acoustic_model = AmDiagGmm()
-        self.acoustic_model.Read(ki.Stream(), True)
-        ki.Close()
+        self.transition_model, self.acoustic_model = read_gmm_model(self.acoustic_model_path)
         self.acoustic_scale = acoustic_scale
         self.lattice_beam = lattice_beam
         self.num_done = 0
