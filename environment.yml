@@ -15,6 +15,9 @@ dependencies:
   - pybind11
   - pytest
   - pip
+  - dataclassy
+  - praatio
+  - pytest-order
   - pip:
       - build
       - twine

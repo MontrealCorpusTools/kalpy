@@ -4,7 +4,6 @@ import os
 import pathlib
 import re
 import typing
-from contextlib import redirect_stderr, redirect_stdout
 
 import pywrapfst
 
@@ -164,8 +163,7 @@ class DecodeGraphCompiler:
             G.fst
         """
         if self.g_fst is None:
-            with redirect_stdout(logger), redirect_stderr(logger):
-                self.g_fst = arpa_to_fst(str(arpa_path), self.lexicon_compiler.word_table)
+            self.g_fst = arpa_to_fst(str(arpa_path), self.lexicon_compiler.word_table)
 
         return self.g_fst
 
@@ -235,8 +233,7 @@ class DecodeGraphCompiler:
         options.eos_symbol = self.lexicon_compiler.word_table.find("</s>")
         options.unk_symbol = self.lexicon_compiler.word_table.find(self.lexicon_compiler.oov_word)
         self.g_carpa_path = str(compiled_path)
-        with redirect_stdout(logger), redirect_stderr(logger):
-            success = BuildConstArpaLm(options, str(temp_carpa_path), self.g_carpa_path)
+        success = BuildConstArpaLm(options, str(temp_carpa_path), self.g_carpa_path)
         if not success:
             logger.error(f"Error compiling G.carpa from {arpa_path}")
         else:
@@ -258,11 +255,10 @@ class DecodeGraphCompiler:
         """
         g_fst = self.compile_g_fst(arpa_path)
         l_fst = pynini_to_kaldi(self.lexicon_compiler.fst)
-        with redirect_stdout(logger), redirect_stderr(logger):
-            lg_fst = fst_table_compose(l_fst, g_fst)
-            fst_determinize_star(lg_fst, use_log=True)
-            fst_minimize_encoded(lg_fst)
-            fst_push_special(lg_fst)
+        lg_fst = fst_table_compose(l_fst, g_fst)
+        fst_determinize_star(lg_fst, use_log=True)
+        fst_minimize_encoded(lg_fst)
+        fst_push_special(lg_fst)
         self.lg_fst = lg_fst
         return lg_fst
 

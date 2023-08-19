@@ -90,8 +90,8 @@ class IvectorExtractorStatsAccumulator:
                 logger.warning(f"Skipping {utt_id} due to mismatch in lengths")
                 self.num_skipped += 1
                 continue
-            if callback:
-                callback(utt_id)
             self.ivector_stats.AccStatsForUtterance(self.model, feats, post)
             self.num_done += 1
+            if callback:
+                callback(utt_id)
         logger.info(f"Done {self.num_done} files, skipped {self.num_skipped}.")

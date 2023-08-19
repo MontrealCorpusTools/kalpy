@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 import collections
-import dataclasses
 import math
 import pathlib
 import re
 import typing
 
+import dataclassy
 import pynini
 import pywrapfst
 
@@ -17,7 +17,7 @@ from kalpy.exceptions import PhonesToPronunciationsError
 from kalpy.gmm.data import CtmInterval, HierarchicalCtm, WordCtmInterval
 
 
-@dataclasses.dataclass
+@dataclassy.dataclass
 class Pronunciation:
     """
     Data class for storing information about a particular pronunciation
@@ -747,7 +747,12 @@ class LexiconCompiler:
             phones,
             transcription=transcription,
         )
-        actual_words = text.split()
+        if transcription:
+            actual_words = [self.word_table.find(x) for x in word_symbols]
+            if not text:
+                text = " ".join(actual_words)
+        else:
+            actual_words = text.split()
         word_intervals = []
         current_phone_index = 0
         current_word_index = 0

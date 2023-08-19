@@ -1,9 +1,10 @@
 """Data classes for kalpy"""
 from __future__ import annotations
 
-import dataclasses
 import pathlib
 import typing
+
+import dataclassy
 
 from _kalpy.matrix import FloatMatrix
 from _kalpy.util import (
@@ -17,7 +18,7 @@ from kalpy.utils import generate_read_specifier
 PathLike = typing.Union[str, pathlib.Path]
 
 
-@dataclasses.dataclass
+@dataclassy.dataclass
 class Segment:
     """
     Data class for information about acoustic segments

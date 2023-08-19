@@ -1093,7 +1093,8 @@ void pybind_determinize_lattice_pruned(py::module& m) {
         py::arg("ifst"),
         py::arg("prune"),
         py::arg("ofst"),
-        py::arg("opts") = DeterminizeLatticePhonePrunedOptions());
+        py::arg("opts") = DeterminizeLatticePhonePrunedOptions(),
+      py::call_guard<py::gil_scoped_release>());
 }
 
 void pybind_kaldi_lattice(py::module& m) {

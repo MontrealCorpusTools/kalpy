@@ -4,7 +4,6 @@ from __future__ import annotations
 import logging
 import pathlib
 import typing
-from contextlib import redirect_stderr, redirect_stdout
 
 import numpy as np
 
@@ -63,8 +62,7 @@ class CmvnComputer:
         :class:`numpy.ndarray`
             Feature matrix for the segment
         """
-        with redirect_stdout(logger), redirect_stderr(logger):
-            cmvn = self.compute_cmvn_for_export(utterance_list, feature_reader)
+        cmvn = self.compute_cmvn_for_export(utterance_list, feature_reader)
         return cmvn.numpy()
 
     def compute_cmvn_from_features(self, features):
@@ -95,8 +93,7 @@ class CmvnComputer:
         :class:`_kalpy.matrix.FloatMatrixBase`
             Feature matrix for the segment
         """
-        with redirect_stdout(logger), redirect_stderr(logger):
-            cmvn, num_done, num_error = transform.calculate_cmvn(utterance_list, feature_reader)
+        cmvn, num_done, num_error = transform.calculate_cmvn(utterance_list, feature_reader)
         self.num_done += num_done
         self.num_error += num_error
         return cmvn

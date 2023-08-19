@@ -5,7 +5,6 @@ import logging
 import pathlib
 import threading
 import typing
-from contextlib import redirect_stderr, redirect_stdout
 
 from _kalpy import transform
 from _kalpy.util import BaseFloatMatrixWriter, ConstIntegerSet
@@ -106,10 +105,9 @@ class FmllrComputer:
                         )
                 if self.thread_lock is not None:
                     self.thread_lock.acquire()
-                with redirect_stdout(logger), redirect_stderr(logger):
-                    trans = transform.compute_fmllr_transform(
-                        spk_stats, self.acoustic_model.Dim(), fmllr_options
-                    )
+                trans = transform.compute_fmllr_transform(
+                    spk_stats, self.acoustic_model.Dim(), fmllr_options
+                )
                 if self.thread_lock is not None:
                     self.thread_lock.release()
                 num_done += 1
@@ -129,41 +127,35 @@ class FmllrComputer:
                     logger.warning(f"Skipping {utterance_id} due to zero-length features")
                     num_skipped += 1
                     continue
-                with redirect_stdout(logger), redirect_stderr(logger):
-                    spk_stats = transform.FmllrDiagGmmAccs(am_dim)
-                    if use_alignment:
-                        spk_stats.accumulate_from_alignment(
-                            self.transition_model,
-                            self.acoustic_model,
-                            feats,
-                            alignment,
-                            silence_set,
-                            self.silence_weight,
-                            rand_prune=rand_prune,
-                            distributed=self.weight_distribute,
-                            two_models=self.two_models,
-                        )
-                    else:
-                        spk_stats.accumulate_from_lattice(
-                            self.transition_model,
-                            self.acoustic_model,
-                            feats,
-                            alignment,
-                            silence_set,
-                            self.silence_weight,
-                            acoustic_scale=self.acoustic_scale,
-                            rand_prune=rand_prune,
-                            distributed=self.weight_distribute,
-                            two_models=self.two_models,
-                        )
-                if self.thread_lock is not None:
-                    self.thread_lock.acquire()
-                with redirect_stdout(logger), redirect_stderr(logger):
-                    trans = transform.compute_fmllr_transform(
-                        spk_stats, self.acoustic_model.Dim(), fmllr_options
+                spk_stats = transform.FmllrDiagGmmAccs(am_dim)
+                if use_alignment:
+                    spk_stats.accumulate_from_alignment(
+                        self.transition_model,
+                        self.acoustic_model,
+                        feats,
+                        alignment,
+                        silence_set,
+                        self.silence_weight,
+                        rand_prune=rand_prune,
+                        distributed=self.weight_distribute,
+                        two_models=self.two_models,
                     )
-                if self.thread_lock is not None:
-                    self.thread_lock.release()
+                else:
+                    spk_stats.accumulate_from_lattice(
+                        self.transition_model,
+                        self.acoustic_model,
+                        feats,
+                        alignment,
+                        silence_set,
+                        self.silence_weight,
+                        acoustic_scale=self.acoustic_scale,
+                        rand_prune=rand_prune,
+                        distributed=self.weight_distribute,
+                        two_models=self.two_models,
+                    )
+                trans = transform.compute_fmllr_transform(
+                    spk_stats, self.acoustic_model.Dim(), fmllr_options
+                )
                 num_done += 1
 
                 yield utterance_id, trans

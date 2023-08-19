@@ -2,7 +2,6 @@
 import logging
 import pathlib
 import typing
-from contextlib import redirect_stderr, redirect_stdout
 
 import pynini
 import pywrapfst
@@ -242,45 +241,42 @@ class TrainingGraphCompiler:
         :class:`_kalpy.fstext.VectorFst`
             Training graph of transcript
         """
-        with redirect_stdout(logger), redirect_stderr(logger):
-            if self.use_g2p:
+        if self.use_g2p:
 
-                g_fst = pynini.accep(transcript, token_type=self.word_table)
-                lg_fst = pynini.compose(g_fst, self._fst, compose_filter="alt_sequence")
-                lg_fst = lg_fst.project("output").rmepsilon()
-                weight_type = lg_fst.weight_type()
-                weight_threshold = pywrapfst.Weight(weight_type, 2.0)
-                state_threshold = 256 + 2 * lg_fst.num_states()
-                lg_fst = pynini.determinize(
-                    lg_fst, nstate=state_threshold, weight=weight_threshold
-                )
-                lg_fst = pynini_to_kaldi(lg_fst)
+            g_fst = pynini.accep(transcript, token_type=self.word_table)
+            lg_fst = pynini.compose(g_fst, self._fst, compose_filter="alt_sequence")
+            lg_fst = lg_fst.project("output").rmepsilon()
+            weight_type = lg_fst.weight_type()
+            weight_threshold = pywrapfst.Weight(weight_type, 2.0)
+            state_threshold = 256 + 2 * lg_fst.num_states()
+            lg_fst = pynini.determinize(lg_fst, nstate=state_threshold, weight=weight_threshold)
+            lg_fst = pynini_to_kaldi(lg_fst)
 
-                fst_determinize_star(lg_fst, use_log=True)
-                fst_minimize_encoded(lg_fst)
-                fst_push_special(lg_fst)
-                clg_fst, disambig_out, ilabels = fst_compose_context(
-                    lg_fst,
-                    self.disambiguation_symbols,
-                    self.tree.ContextWidth(),
-                    self.tree.CentralPosition(),
-                )
-                fst_arc_sort(clg_fst, sort_type="ilabel")
-                h, disambig = make_h_transducer(self.tree, self.transition_model, ilabels)
-                fst = fst_table_compose(h, clg_fst)
-                if fst.Start() == pywrapfst.NO_STATE_ID:
-                    logger.debug(f"Falling back to pynini compose for '{transcript}")
-                    h = kaldi_to_pynini(h)
-                    clg_fst = kaldi_to_pynini(clg_fst)
-                    fst = pynini_to_kaldi(pynini.compose(h, clg_fst))
-                fst_determinize_star(fst, use_log=True)
-                fst_rm_symbols(fst, disambig)
-                fst_rm_eps_local(fst)
-                fst_minimize_encoded(fst)
-                fst_add_self_loops(fst, self.transition_model, [], self.options.self_loop_scale)
-            else:
-                transcript_symbols = [self.to_int(x) for x in transcript.split()]
-                fst = self.compiler.CompileGraphFromText(transcript_symbols)
+            fst_determinize_star(lg_fst, use_log=True)
+            fst_minimize_encoded(lg_fst)
+            fst_push_special(lg_fst)
+            clg_fst, disambig_out, ilabels = fst_compose_context(
+                lg_fst,
+                self.disambiguation_symbols,
+                self.tree.ContextWidth(),
+                self.tree.CentralPosition(),
+            )
+            fst_arc_sort(clg_fst, sort_type="ilabel")
+            h, disambig = make_h_transducer(self.tree, self.transition_model, ilabels)
+            fst = fst_table_compose(h, clg_fst)
+            if fst.Start() == pywrapfst.NO_STATE_ID:
+                logger.debug(f"Falling back to pynini compose for '{transcript}")
+                h = kaldi_to_pynini(h)
+                clg_fst = kaldi_to_pynini(clg_fst)
+                fst = pynini_to_kaldi(pynini.compose(h, clg_fst))
+            fst_determinize_star(fst, use_log=True)
+            fst_rm_symbols(fst, disambig)
+            fst_rm_eps_local(fst)
+            fst_minimize_encoded(fst)
+            fst_add_self_loops(fst, self.transition_model, [], self.options.self_loop_scale)
+        else:
+            transcript_symbols = [self.to_int(x) for x in transcript.split()]
+            fst = self.compiler.CompileGraphFromText(transcript_symbols)
         if fst.Start() == pywrapfst.NO_STATE_ID:
             logger.warning(f"Could not construct FST for '{transcript}")
             return None

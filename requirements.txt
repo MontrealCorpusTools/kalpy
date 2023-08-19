@@ -2,3 +2,5 @@ librosa
 numpy
 pysoundfile
 pynini
+dataclassy
+praatio

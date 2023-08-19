@@ -4,7 +4,6 @@ from __future__ import annotations
 import logging
 import pathlib
 import typing
-from contextlib import redirect_stderr, redirect_stdout
 
 from _kalpy.fstext import VectorFst
 from _kalpy.lat import (
@@ -52,31 +51,30 @@ class LmRescorer:
         add_lm: typing.Union[VectorFst, ConstArpaLm],
         utterance_id: str = None,
     ):
-        with redirect_stdout(logger), redirect_stderr(logger):
-            try:
-                if isinstance(add_lm, ConstArpaLm):
-                    new_lattice = lm_rescore_carpa(
-                        lattice,
-                        self.g_fst,
-                        add_lm,
-                        self.options,
-                        self.lm_scale,
-                        self.acoustic_scale,
-                    )
-                else:
-                    new_lattice = lm_rescore(
-                        lattice,
-                        self.g_fst,
-                        add_lm,
-                        self.options,
-                        self.lm_scale,
-                        self.acoustic_scale,
-                    )
-                self.num_done += 1
-            except Exception:
-                self.num_error += 1
-                logger.warning(f"Error in rescoring {utterance_id}")
-                raise
+        try:
+            if isinstance(add_lm, ConstArpaLm):
+                new_lattice = lm_rescore_carpa(
+                    lattice,
+                    self.g_fst,
+                    add_lm,
+                    self.options,
+                    self.lm_scale,
+                    self.acoustic_scale,
+                )
+            else:
+                new_lattice = lm_rescore(
+                    lattice,
+                    self.g_fst,
+                    add_lm,
+                    self.options,
+                    self.lm_scale,
+                    self.acoustic_scale,
+                )
+            self.num_done += 1
+        except Exception:
+            self.num_error += 1
+            logger.warning(f"Error in rescoring {utterance_id}")
+            raise
         return new_lattice
 
     def rescore_utterances(

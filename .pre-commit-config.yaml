@@ -36,6 +36,6 @@ repos:
       - id: debug-statements
       - id: end-of-file-fixer
       - id: trailing-whitespace
-      #- id: check-added-large-files
-      #  args: ['--maxkb=2000']
+      - id: check-added-large-files
+        args: ['--maxkb=2000']
       - id: mixed-line-ending

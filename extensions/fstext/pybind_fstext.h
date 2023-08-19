@@ -28,7 +28,7 @@ public:
     using Fst<A>::Fst;
 
     //Trampoline (need one for each virtual function)
-    Fst<A>::StateId Start() const override {
+    typename Fst<A>::StateId Start() const override {
         PYBIND11_OVERRIDE_PURE(
             int, //Return type (ret_type)
             Fst<A>,      //Parent class (cname)
@@ -37,16 +37,16 @@ public:
         );
     }
 
-    Fst<A>::Weight Final(Fst<A>::StateId s) const override {
+    typename Fst<A>::Weight Final(typename Fst<A>::StateId s) const override {
         PYBIND11_OVERRIDE_PURE(
-            Fst<A>::Weight, //Return type (ret_type)
+            typename Fst<A>::Weight, //Return type (ret_type)
             Fst<A>,      //Parent class (cname)
             Final,          //Name of function in C++ (must match Python name) (fn)
             s      //Argument(s) (...)
         );
     }
 
-    size_t NumArcs(Fst<A>::StateId s) const override {
+    size_t NumArcs(typename Fst<A>::StateId s) const override {
         PYBIND11_OVERRIDE_PURE(
             size_t, //Return type (ret_type)
             Fst<A>,      //Parent class (cname)
@@ -55,7 +55,7 @@ public:
         );
     }
 
-    size_t NumInputEpsilons(Fst<A>::StateId s) const override {
+    size_t NumInputEpsilons(typename Fst<A>::StateId s) const override {
         PYBIND11_OVERRIDE_PURE(
             size_t, //Return type (ret_type)
             Fst<A>,      //Parent class (cname)
@@ -64,7 +64,7 @@ public:
         );
     }
 
-    size_t NumOutputEpsilons(Fst<A>::StateId s) const override {
+    size_t NumOutputEpsilons(typename Fst<A>::StateId s) const override {
         PYBIND11_OVERRIDE_PURE(
             size_t, //Return type (ret_type)
             Fst<A>,      //Parent class (cname)
@@ -127,7 +127,7 @@ public:
         );
     }
 
-    void InitArcIterator(Fst<A>::StateId s, ArcIteratorData<A> *data) const override {
+    void InitArcIterator(typename Fst<A>::StateId s, ArcIteratorData<A> *data) const override {
         PYBIND11_OVERRIDE_PURE(
             void, //Return type (ret_type)
             Fst<A>,      //Parent class (cname)
@@ -153,7 +153,7 @@ public:
     using ExpandedFst<A>::ExpandedFst;
 
     //Trampoline (need one for each virtual function)
-    ExpandedFst<A>::StateId Start() const override {
+    typename ExpandedFst<A>::StateId Start() const override {
         PYBIND11_OVERRIDE_PURE(
             int, //Return type (ret_type)
             ExpandedFst<A>,      //Parent class (cname)
@@ -162,7 +162,7 @@ public:
         );
     }
 
-    typename A::Weight Final(Fst<A>::StateId s) const override {
+    typename A::Weight Final(typename Fst<A>::StateId s) const override {
         PYBIND11_OVERRIDE_PURE(
             typename A::Weight, //Return type (ret_type)
             ExpandedFst<A>,      //Parent class (cname)
@@ -171,7 +171,7 @@ public:
         );
     }
 
-    size_t NumArcs(ExpandedFst<A>::StateId s) const override {
+    size_t NumArcs(typename ExpandedFst<A>::StateId s) const override {
         PYBIND11_OVERRIDE_PURE(
             size_t, //Return type (ret_type)
             ExpandedFst<A>,      //Parent class (cname)
@@ -180,16 +180,16 @@ public:
         );
     }
 
-    ExpandedFst<A>::StateId NumStates() const override {
+    typename ExpandedFst<A>::StateId NumStates() const override {
         PYBIND11_OVERRIDE_PURE(
-            ExpandedFst<A>::StateId, //Return type (ret_type)
+            typename ExpandedFst<A>::StateId, //Return type (ret_type)
             ExpandedFst<A>,      //Parent class (cname)
             NumStates        //Name of function in C++ (must match Python name) (fn)
                   //Argument(s) (...)
         );
     }
 
-    size_t NumInputEpsilons(ExpandedFst<A>::StateId s) const override {
+    size_t NumInputEpsilons(typename ExpandedFst<A>::StateId s) const override {
         PYBIND11_OVERRIDE_PURE(
             size_t, //Return type (ret_type)
             ExpandedFst<A>,      //Parent class (cname)
@@ -198,7 +198,7 @@ public:
         );
     }
 
-    size_t NumOutputEpsilons(ExpandedFst<A>::StateId s) const override {
+    size_t NumOutputEpsilons(typename ExpandedFst<A>::StateId s) const override {
         PYBIND11_OVERRIDE_PURE(
             size_t, //Return type (ret_type)
             ExpandedFst<A>,      //Parent class (cname)
@@ -261,7 +261,7 @@ public:
         );
     }
 
-    void InitArcIterator(Fst<A>::StateId s, ArcIteratorData<A> *data) const override {
+    void InitArcIterator(typename Fst<A>::StateId s, ArcIteratorData<A> *data) const override {
         PYBIND11_OVERRIDE_PURE(
             void, //Return type (ret_type)
             ExpandedFst<A>,      //Parent class (cname)
@@ -287,7 +287,7 @@ public:
     using MutableFst<A>::MutableFst;
 
     //Trampoline (need one for each virtual function)
-    MutableFst<A>::StateId Start() const override {
+    typename MutableFst<A>::StateId Start() const override {
         PYBIND11_OVERRIDE_PURE(
             int, //Return type (ret_type)
             MutableFst<A>,      //Parent class (cname)
@@ -296,16 +296,16 @@ public:
         );
     }
 
-    MutableFst<A>::Weight Final(MutableFst<A>::StateId s) const override {
+    typename MutableFst<A>::Weight Final(typename MutableFst<A>::StateId s) const override {
         PYBIND11_OVERRIDE_PURE(
-            MutableFst<A>::Weight, //Return type (ret_type)
+            typename MutableFst<A>::Weight, //Return type (ret_type)
             MutableFst<A>,      //Parent class (cname)
             Final,          //Name of function in C++ (must match Python name) (fn)
             s      //Argument(s) (...)
         );
     }
 
-    size_t NumArcs(MutableFst<A>::StateId s) const override {
+    size_t NumArcs(typename MutableFst<A>::StateId s) const override {
         PYBIND11_OVERRIDE_PURE(
             size_t, //Return type (ret_type)
             MutableFst<A>,      //Parent class (cname)
@@ -314,7 +314,7 @@ public:
         );
     }
 
-    size_t NumInputEpsilons(MutableFst<A>::StateId s) const override {
+    size_t NumInputEpsilons(typename MutableFst<A>::StateId s) const override {
         PYBIND11_OVERRIDE_PURE(
             size_t, //Return type (ret_type)
             MutableFst<A>,      //Parent class (cname)
@@ -323,7 +323,7 @@ public:
         );
     }
 
-    size_t NumOutputEpsilons(MutableFst<A>::StateId s) const override {
+    size_t NumOutputEpsilons(typename MutableFst<A>::StateId s) const override {
         PYBIND11_OVERRIDE_PURE(
             size_t, //Return type (ret_type)
             MutableFst<A>,      //Parent class (cname)
@@ -386,7 +386,7 @@ public:
         );
     }
 
-    void InitArcIterator(MutableFst<A>::StateId s, ArcIteratorData<A> *data) const override {
+    void InitArcIterator(typename MutableFst<A>::StateId s, ArcIteratorData<A> *data) const override {
         PYBIND11_OVERRIDE_PURE(
             void, //Return type (ret_type)
             MutableFst<A>,      //Parent class (cname)
@@ -404,9 +404,9 @@ public:
         );
     }
 
-    MutableFst<A>::StateId NumStates() const override {
+    typename MutableFst<A>::StateId NumStates() const override {
         PYBIND11_OVERRIDE_PURE(
-            MutableFst<A>::StateId, //Return type (ret_type)
+            typename MutableFst<A>::StateId, //Return type (ret_type)
             MutableFst<A>,      //Parent class (cname)
             NumStates        //Name of function in C++ (must match Python name) (fn)
                   //Argument(s) (...)
@@ -422,7 +422,7 @@ public:
         );
     }
 
-    void SetStart(MutableFst<A>::StateId s) override {
+    void SetStart(typename MutableFst<A>::StateId s) override {
         PYBIND11_OVERRIDE_PURE(
             void, //Return type (ret_type)
             MutableFst<A>,      //Parent class (cname)
@@ -431,7 +431,7 @@ public:
         );
     }
 
-    void SetFinal(MutableFst<A>::StateId s, MutableFst<A>::Weight weight = MutableFst<A>::Weight::One()) override {
+    void SetFinal(typename MutableFst<A>::StateId s, typename MutableFst<A>::Weight weight = MutableFst<A>::Weight::One()) override {
         PYBIND11_OVERRIDE_PURE(
             void, //Return type (ret_type)
             MutableFst<A>,      //Parent class (cname)
@@ -449,9 +449,9 @@ public:
         );
     }
 
-    MutableFst<A>::StateId AddState() override {
+    typename MutableFst<A>::StateId AddState() override {
         PYBIND11_OVERRIDE_PURE(
-            MutableFst<A>::StateId, //Return type (ret_type)
+            typename MutableFst<A>::StateId, //Return type (ret_type)
             MutableFst<A>,      //Parent class (cname)
             SetProperties          //Name of function in C++ (must match Python name) (fn)
                  //Argument(s) (...)
@@ -467,7 +467,7 @@ public:
         );
     }
 
-    void AddArc(MutableFst<A>::StateId s, const A & arc) override {
+    void AddArc(typename MutableFst<A>::StateId s, const A & arc) override {
         PYBIND11_OVERRIDE_PURE(
             void, //Return type (ret_type)
             MutableFst<A>,      //Parent class (cname)
@@ -476,7 +476,7 @@ public:
         );
     }
 
-    void DeleteStates(const std::vector<MutableFst<A>::StateId> & s) override {
+    void DeleteStates(const std::vector<typename MutableFst<A>::StateId> & s) override {
         PYBIND11_OVERRIDE_PURE(
             void, //Return type (ret_type)
             MutableFst<A>,      //Parent class (cname)
@@ -494,7 +494,7 @@ public:
         );
     }
 
-    void DeleteArcs(MutableFst<A>::StateId s, size_t n) override {
+    void DeleteArcs(typename MutableFst<A>::StateId s, size_t n) override {
         PYBIND11_OVERRIDE_PURE(
             void, //Return type (ret_type)
             MutableFst<A>,      //Parent class (cname)
@@ -503,7 +503,7 @@ public:
         );
     }
 
-    void DeleteArcs(MutableFst<A>::StateId s) override {
+    void DeleteArcs(typename MutableFst<A>::StateId s) override {
         PYBIND11_OVERRIDE_PURE(
             void, //Return type (ret_type)
             MutableFst<A>,      //Parent class (cname)
@@ -521,7 +521,7 @@ public:
         );
     }
 
-    void ReserveArcs(MutableFst<A>::StateId s, size_t n) override {
+    void ReserveArcs(typename MutableFst<A>::StateId s, size_t n) override {
         PYBIND11_OVERRIDE_PURE(
             void, //Return type (ret_type)
             MutableFst<A>,      //Parent class (cname)
@@ -566,7 +566,7 @@ public:
         );
     }
 
-    void InitMutableArcIterator(MutableFst<A>::StateId s,
+    void InitMutableArcIterator(typename MutableFst<A>::StateId s,
                                       MutableArcIteratorData<A> *data) override {
         PYBIND11_OVERRIDE_PURE(
             void, //Return type (ret_type)
@@ -1076,16 +1076,20 @@ void pybind_lattice_fst_impl(py::module& m, const std::string& class_name,
            "directly by users). Does not copy the FST.",
            py::arg("s"), py::arg("data"))
       .def("Connect", [](PyClass* f){
+          py::gil_scoped_release release;
              fst::Connect<Arc>(f);
       })
       .def("ScaleLattice", [](PyClass* f, BaseFloat acoustic_scale = 1.0,
             BaseFloat lm_scale = 1.0){
+          py::gil_scoped_release release;
+
             if (acoustic_scale != 1.0 || lm_scale != 1.0)
                 fst::ScaleLattice(fst::LatticeScale(lm_scale, acoustic_scale), f);
       },
                   py::arg("acoustic_scale") = 1.0,
                   py::arg("lm_scale") = 1.0)
       .def("TopSort", [](PyClass* f){
+          py::gil_scoped_release release;
             kaldi::uint64 props = f->Properties(fst::kFstProperties, false);
             if (!(props & fst::kTopSorted)) {
                 if (!fst::TopSort(f))

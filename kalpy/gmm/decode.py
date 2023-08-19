@@ -4,7 +4,6 @@ from __future__ import annotations
 import logging
 import pathlib
 import typing
-from contextlib import redirect_stderr, redirect_stdout
 
 from _kalpy.decoder import LatticeFasterDecoder, LatticeFasterDecoderConfig
 from _kalpy.fstext import ConstFst, GetLinearSymbolSequence
@@ -18,10 +17,11 @@ from _kalpy.lat import (
     LatticeWriter,
     lattice_to_post,
 )
-from _kalpy.matrix import FloatMatrixBase
+from _kalpy.matrix import FloatMatrix
 from _kalpy.util import Input, Int32VectorWriter
 from kalpy.feat.data import FeatureArchive
 from kalpy.gmm.data import Alignment, LatticeArchive
+from kalpy.gmm.utils import read_gmm_model
 from kalpy.utils import generate_write_specifier
 
 logger = logging.getLogger("kalpy.decode")
@@ -36,8 +36,6 @@ class GmmDecoder:
         acoustic_model_path: typing.Union[pathlib.Path, str],
         hclg_fst: ConstFst,
         acoustic_scale: float = 0.1,
-        transition_scale: float = 1.0,
-        self_loop_scale: float = 1.0,
         beam: float = 16.0,
         lattice_beam: float = 10.0,
         max_active: int = 7000,
@@ -48,20 +46,23 @@ class GmmDecoder:
         hash_ratio: float = 2.0,
         prune_scale: float = 0.1,
         allow_partial: bool = True,
+        fast: bool = False,
     ):
-
-        ki = Input()
-        ki.Open(str(acoustic_model_path), True)
-        self.transition_model = TransitionModel()
-        self.transition_model.Read(ki.Stream(), True)
-        self.acoustic_model = AmDiagGmm()
-        self.acoustic_model.Read(ki.Stream(), True)
-        ki.Close()
+        self.acoustic_model_path = acoustic_model_path
+        self.transition_model, self.acoustic_model = read_gmm_model(self.acoustic_model_path)
         self.hclg_fst = hclg_fst
         self.acoustic_scale = acoustic_scale
-        self.transition_scale = transition_scale
-        self.self_loop_scale = self_loop_scale
         self.allow_partial = allow_partial
+        self.beam = beam
+        self.lattice_beam = lattice_beam
+        self.max_active = max_active
+        self.min_active = min_active
+        self.prune_interval = prune_interval
+        self.determinize_lattice = determinize_lattice
+        self.beam_delta = beam_delta
+        self.hash_ratio = hash_ratio
+        self.prune_scale = prune_scale
+        self.fast = fast
 
         self.config = LatticeFasterDecoderConfig()
         self.config.beam = beam
@@ -86,84 +87,84 @@ class GmmDecoder:
             )
 
     def decode_utterance(
-        self, features: FloatMatrixBase, utterance_id: str = None
+        self, features: FloatMatrix, utterance_id: str = None
     ) -> typing.Optional[Alignment]:
-        with redirect_stdout(logger), redirect_stderr(logger):
-            decodable = DecodableAmDiagGmmScaled(
-                self.acoustic_model, self.transition_model, features, self.acoustic_scale
-            )
+        decodable = DecodableAmDiagGmmScaled(
+            self.acoustic_model, self.transition_model, features, self.acoustic_scale
+        )
 
-            d = LatticeFasterDecoder(self.hclg_fst, self.config)
-            ans = d.Decode(decodable)
-            if not ans:
-                logger.warning(f"Did not successfully decode {utterance_id}")
-                self.num_error += 1
-                return None
+        d = LatticeFasterDecoder(self.hclg_fst, self.config)
+        ans = d.Decode(decodable)
+        if not ans:
+            logger.warning(f"Did not successfully decode {utterance_id}")
+            self.num_error += 1
+            return None
 
-            ans = d.ReachedFinal()
-            if not ans:
-                if self.allow_partial:
-                    logger.warning(
-                        f"Outputting partial output for utterance {utterance_id} "
-                        "since no final-state reached"
-                    )
-                else:
-                    logger.warning(
-                        f"Not producing output for utterance {utterance_id} "
-                        f"since no final-state reached and allow_partial==False"
-                    )
-
-            ans, decoded = d.GetBestPath()
-            if not ans:
-                logger.error(f"Failed to get traceback for utterance {utterance_id}")
-                return None
-            if decoded.NumStates() == 0:
+        ans = d.ReachedFinal()
+        if not ans:
+            if self.allow_partial:
                 logger.warning(
-                    f"Error getting best path from decoder for utterance {utterance_id}"
-                )
-            alignment, words, weight = GetLinearSymbolSequence(decoded)
-            likelihood = -(weight.Value1() + weight.Value2()) / self.acoustic_scale
-            self.num_done += 1
-            self.total_likelihood += likelihood
-            self.total_frames += len(alignment)
-            per_frame_log_likelihoods = GetPerFrameAcousticCosts(decoded)
-            per_frame_log_likelihoods.Scale(-1 / self.acoustic_scale)
-            ans, lat = d.GetRawLattice()
-            lat.Connect()
-            if self.config.determinize_lattice:
-                clat = CompactLattice()
-                ans = DeterminizeLatticePhonePrunedWrapper(
-                    self.transition_model,
-                    lat,
-                    self.config.lattice_beam,
-                    clat,
-                    self.config.det_opts,
-                )
-                if not ans:
-                    logger.warning(
-                        f"Determinization finished earlier than the beam for utterance {utterance_id}"
-                    )
-                if self.acoustic_scale != 0.0:
-                    clat.ScaleLattice(acoustic_scale=self.acoustic_scale)
-                data = Alignment(
-                    utterance_id,
-                    alignment,
-                    words,
-                    likelihood,
-                    per_frame_log_likelihoods,
-                    lattice=clat,
+                    f"Outputting partial output for utterance {utterance_id} "
+                    "since no final-state reached"
                 )
             else:
-                if self.acoustic_scale != 0.0:
-                    lat.ScaleLattice(acoustic_scale=self.acoustic_scale)
-                data = Alignment(
-                    utterance_id,
-                    alignment,
-                    words,
-                    likelihood,
-                    per_frame_log_likelihoods,
-                    lattice=lat,
+                logger.warning(
+                    f"Not producing output for utterance {utterance_id} "
+                    f"since no final-state reached and allow_partial==False"
                 )
+
+        ans, decoded = d.GetBestPath()
+        if not ans:
+            logger.error(f"Failed to get traceback for utterance {utterance_id}")
+            return None
+        if decoded.NumStates() == 0:
+            logger.warning(f"Error getting best path from decoder for utterance {utterance_id}")
+        alignment, words, weight = GetLinearSymbolSequence(decoded)
+        likelihood = -(weight.Value1() + weight.Value2()) / self.acoustic_scale
+        if self.fast:
+            return Alignment(utterance_id, alignment, words, likelihood)
+
+        self.num_done += 1
+        self.total_likelihood += likelihood
+        self.total_frames += len(alignment)
+        per_frame_log_likelihoods = GetPerFrameAcousticCosts(decoded)
+        per_frame_log_likelihoods.Scale(-1 / self.acoustic_scale)
+        ans, lat = d.GetRawLattice()
+        lat.Connect()
+        if self.config.determinize_lattice:
+            clat = CompactLattice()
+            ans = DeterminizeLatticePhonePrunedWrapper(
+                self.transition_model,
+                lat,
+                self.config.lattice_beam,
+                clat,
+                self.config.det_opts,
+            )
+            if not ans:
+                logger.warning(
+                    f"Determinization finished earlier than the beam for utterance {utterance_id}"
+                )
+            if self.acoustic_scale != 0.0:
+                clat.ScaleLattice(acoustic_scale=self.acoustic_scale)
+            data = Alignment(
+                utterance_id,
+                alignment,
+                words,
+                likelihood,
+                per_frame_log_likelihoods,
+                lattice=clat,
+            )
+        else:
+            if self.acoustic_scale != 0.0:
+                lat.ScaleLattice(acoustic_scale=self.acoustic_scale)
+            data = Alignment(
+                utterance_id,
+                alignment,
+                words,
+                likelihood,
+                per_frame_log_likelihoods,
+                lattice=lat,
+            )
         logger.info(
             f"Log-like per frame for utterance {utterance_id} is "
             f"{likelihood/len(alignment)} over {len(alignment)} frames."
@@ -240,13 +241,7 @@ class GmmRescorer:
         lattice_beam: float = 6.0,
     ):
         self.acoustic_model_path = acoustic_model_path
-        ki = Input()
-        ki.Open(str(acoustic_model_path), True)
-        self.transition_model = TransitionModel()
-        self.transition_model.Read(ki.Stream(), True)
-        self.acoustic_model = AmDiagGmm()
-        self.acoustic_model.Read(ki.Stream(), True)
-        ki.Close()
+        self.transition_model, self.acoustic_model = read_gmm_model(self.acoustic_model_path)
         self.acoustic_scale = acoustic_scale
         self.lattice_beam = lattice_beam
         self.num_done = 0
@@ -254,7 +249,7 @@ class GmmRescorer:
         self.config = LatticeFasterDecoderConfig()
 
     def rescore_utterance(
-        self, lattice: CompactLattice, feats: FloatMatrixBase, utterance_id: str = None
+        self, lattice: CompactLattice, feats: FloatMatrix, utterance_id: str = None
     ):
 
         try:

@@ -4,7 +4,6 @@ from __future__ import annotations
 import logging
 import pathlib
 import typing
-from contextlib import redirect_stderr, redirect_stdout
 
 import librosa
 import numpy as np
@@ -217,10 +216,9 @@ class MfccComputer:
         if len(wave.shape) == 2:
             channel = 0 if segment.channel is None else segment.channel
             wave = wave[channel, :]
-        with redirect_stdout(logger), redirect_stderr(logger):
-            mfccs = self.mfcc_obj.compute(wave)
-            if compress:
-                mfccs = CompressedMatrix(mfccs)
+        mfccs = self.mfcc_obj.compute(wave)
+        if compress:
+            mfccs = CompressedMatrix(mfccs)
         return mfccs
 
     def export_feats(
