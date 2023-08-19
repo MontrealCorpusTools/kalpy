@@ -1076,16 +1076,20 @@ void pybind_lattice_fst_impl(py::module& m, const std::string& class_name,
            "directly by users). Does not copy the FST.",
            py::arg("s"), py::arg("data"))
       .def("Connect", [](PyClass* f){
+          py::gil_scoped_release release;
              fst::Connect<Arc>(f);
       })
       .def("ScaleLattice", [](PyClass* f, BaseFloat acoustic_scale = 1.0,
             BaseFloat lm_scale = 1.0){
+          py::gil_scoped_release release;
+
             if (acoustic_scale != 1.0 || lm_scale != 1.0)
                 fst::ScaleLattice(fst::LatticeScale(lm_scale, acoustic_scale), f);
       },
                   py::arg("acoustic_scale") = 1.0,
                   py::arg("lm_scale") = 1.0)
       .def("TopSort", [](PyClass* f){
+          py::gil_scoped_release release;
             kaldi::uint64 props = f->Properties(fst::kFstProperties, false);
             if (!(props & fst::kTopSorted)) {
                 if (!fst::TopSort(f))

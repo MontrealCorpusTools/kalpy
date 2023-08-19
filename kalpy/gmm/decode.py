@@ -17,10 +17,11 @@ from _kalpy.lat import (
     LatticeWriter,
     lattice_to_post,
 )
-from _kalpy.matrix import FloatMatrixBase
+from _kalpy.matrix import FloatMatrix
 from _kalpy.util import Input, Int32VectorWriter
 from kalpy.feat.data import FeatureArchive
 from kalpy.gmm.data import Alignment, LatticeArchive
+from kalpy.gmm.utils import read_gmm_model
 from kalpy.utils import generate_write_specifier
 
 logger = logging.getLogger("kalpy.decode")
@@ -48,14 +49,8 @@ class GmmDecoder:
         prune_scale: float = 0.1,
         allow_partial: bool = True,
     ):
-
-        ki = Input()
-        ki.Open(str(acoustic_model_path), True)
-        self.transition_model = TransitionModel()
-        self.transition_model.Read(ki.Stream(), True)
-        self.acoustic_model = AmDiagGmm()
-        self.acoustic_model.Read(ki.Stream(), True)
-        ki.Close()
+        self.acoustic_model_path = acoustic_model_path
+        self.transition_model, self.acoustic_model = read_gmm_model(self.acoustic_model_path)
         self.hclg_fst = hclg_fst
         self.acoustic_scale = acoustic_scale
         self.transition_scale = transition_scale
@@ -85,7 +80,7 @@ class GmmDecoder:
             )
 
     def decode_utterance(
-        self, features: FloatMatrixBase, utterance_id: str = None
+        self, features: FloatMatrix, utterance_id: str = None
     ) -> typing.Optional[Alignment]:
         decodable = DecodableAmDiagGmmScaled(
             self.acoustic_model, self.transition_model, features, self.acoustic_scale
@@ -250,7 +245,7 @@ class GmmRescorer:
         self.config = LatticeFasterDecoderConfig()
 
     def rescore_utterance(
-        self, lattice: CompactLattice, feats: FloatMatrixBase, utterance_id: str = None
+        self, lattice: CompactLattice, feats: FloatMatrix, utterance_id: str = None
     ):
 
         try:

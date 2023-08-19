@@ -487,8 +487,6 @@ void pybind_diag_gmm(py::module& m) {
           [](PyClass& gmm, const AccumDiagGmm &gmm_accs,
           int32 mixup = 0,
           BaseFloat perturb_factor = 0.01,
-          BaseFloat power = 0.2,
-          BaseFloat min_count = 20.0,
           BaseFloat min_gaussian_weight = 1.0e-05,
           BaseFloat min_gaussian_occupancy = 10.0,
           BaseFloat min_variance= 0.001,
@@ -496,8 +494,6 @@ void pybind_diag_gmm(py::module& m) {
           std::string update_flags_str = "mvw"
           ){
           py::gil_scoped_release gil_release;
-        kaldi::GmmFlagsType update_flags =
-            StringToGmmFlags(update_flags_str);
 
         MleDiagGmmOptions gmm_opts;
         gmm_opts.min_gaussian_weight = min_gaussian_weight;
@@ -517,13 +513,11 @@ void pybind_diag_gmm(py::module& m) {
           py::arg("gmm_accs"),
           py::arg("mixup") = 0,
           py::arg("perturb_factor") = 0.01,
-          py::arg("power") = 0.2,
-          py::arg("min_count") = 20.0,
           py::arg("min_gaussian_weight") = 1.0e-05,
           py::arg("min_gaussian_occupancy") = 10.0,
           py::arg("min_variance")= 0.001,
           py::arg("remove_low_count_gaussians") = true,
-          py::arg("update_flags_str") = "mvwt")
+          py::arg("update_flags_str") = "mvw")
       .def("generate_post",
         [](
           PyClass&gmm,
@@ -534,6 +528,7 @@ void pybind_diag_gmm(py::module& m) {
           py::gil_scoped_release release;
       int32 T = feats.NumRows();
       Matrix<BaseFloat> loglikes;
+      gmm.LogLikelihoods(feats, &loglikes);
 
       Posterior post(T);
       double log_like_this_file = 0.0;

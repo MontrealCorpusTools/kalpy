@@ -496,7 +496,30 @@ void pybind_ivector_extractor(py::module &m) {
       .def("Update", &PyClass::Update,
       "Returns the objf improvement per frame.",
         py::arg("opts"),
-        py::arg("extractor"))
+        py::arg("extractor"),
+      py::call_guard<py::gil_scoped_release>())
+      .def("update", [](
+        PyClass &stats,
+        IvectorExtractor &extractor,
+        double variance_floor_factor=0.1,
+        double gaussian_min_count=100.0,
+        int32 num_threads=1,
+        bool diagonalize=true
+      ){
+
+      IvectorExtractorEstimationOptions update_opts;
+      update_opts.variance_floor_factor = variance_floor_factor;
+      update_opts.gaussian_min_count = gaussian_min_count;
+      update_opts.num_threads = num_threads;
+      update_opts.diagonalize = diagonalize;
+      stats.Update(update_opts, &extractor);
+      },
+      "Returns the objf improvement per frame.",
+        py::arg("extractor"),
+        py::arg("variance_floor_factor")=0.1,
+        py::arg("gaussian_min_count")=100.0,
+        py::arg("num_threads")=1,
+        py::arg("diagonalize")=true)
       .def("AuxfPerFrame",
         &PyClass::AuxfPerFrame)
       .def("IvectorVarianceDiagnostic",

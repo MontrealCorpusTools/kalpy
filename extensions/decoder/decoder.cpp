@@ -1524,14 +1524,17 @@ void pybind_lattice_faster_decoder_impl(
            "note, this may block waiting for input if the 'decodable' object "
            "blocks. Returns true if any kind of traceback is available (not "
            "necessarily from a final state).",
-           py::arg("decodable"))
+           py::arg("decodable"),
+      py::call_guard<py::gil_scoped_release>())
       .def("ReachedFinal", &PyClass::ReachedFinal,
            "says whether a final-state was active on the last frame.  If it "
            "was not, the lattice (or traceback) will end with states that are "
-           "not final-states.")
+           "not final-states.",
+      py::call_guard<py::gil_scoped_release>())
       .def("GetBestPath",
            [](const PyClass& decoder,
               bool use_final_probs = true) -> std::pair<bool, Lattice> {
+          py::gil_scoped_release release;
              Lattice ofst;
              bool is_succeeded = decoder.GetBestPath(&ofst, use_final_probs);
              return std::make_pair(is_succeeded, ofst);
@@ -1552,6 +1555,7 @@ void pybind_lattice_faster_decoder_impl(
       .def("GetRawLattice",
            [](const PyClass& decoder,
               bool use_final_probs = true) -> std::pair<bool, Lattice> {
+          py::gil_scoped_release release;
              Lattice ofst;
              bool is_succeeded = decoder.GetRawLattice(&ofst, use_final_probs);
              return std::make_pair(is_succeeded, ofst);
