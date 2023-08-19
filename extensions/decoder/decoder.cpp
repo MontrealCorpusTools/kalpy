@@ -19,6 +19,9 @@
 #include "fst/fst.h"
 #include "hmm/transition-model.h"
 #include "matrix/kaldi-matrix.h"
+#include "gmm/diag-gmm.h"
+#include "gmm/decodable-am-diag-gmm.h"
+#include "lat/lattice-functions.h"
 
 using namespace kaldi;
 using namespace fst;
@@ -128,7 +131,30 @@ void pybind_decoder_wrappers(py::module& m) {
     align_config.def(py::init<>())
       .def_readwrite("beam", &PyClass::beam)
       .def_readwrite("retry_beam", &PyClass::retry_beam)
-      .def_readwrite("careful", &PyClass::careful);
+      .def_readwrite("careful", &PyClass::careful)
+      .def(py::pickle(
+        [](const PyClass &p) { // __getstate__
+            /* Return a tuple that fully encodes the state of the object */
+            return py::make_tuple(
+                p.beam,
+                p.retry_beam,
+                p.careful);
+        },
+        [](py::tuple t) { // __setstate__
+            if (t.size() != 3)
+                throw std::runtime_error("Invalid state!");
+
+            /* Create a new C++ instance */
+            PyClass opts;
+
+            /* Assign any additional state */
+            opts.beam = t[0].cast<BaseFloat>();
+            opts.retry_beam = t[1].cast<BaseFloat>();
+            opts.careful = t[2].cast<bool>();
+
+            return opts;
+        }
+    ));
   }
 
   m.def("AlignUtteranceWrapper",
@@ -166,7 +192,8 @@ void pybind_decoder_wrappers(py::module& m) {
           "the first but not the second FST, we modify the right-hand argument to the "
           "Concat operation so that it has none of the original final-probs, and add "
           "a \"pre-initial\" state that is final.",
-        py::arg("fst"));
+        py::arg("fst"),
+      py::call_guard<py::gil_scoped_release>());
   {
     using PyClass = DecodeUtteranceLatticeFasterClass;
 
@@ -279,12 +306,14 @@ void pybind_decoder_grammar_fst(py::module& m) {
           "compatibility with other Kaldi read/write functions (it will crash if "
           "binary == false).",
           py::arg("os"),
-          py::arg("binary"))
+          py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
       .def("Read",
         &PyClass::Read,
         "Reads the format that Write() outputs.  Will crash if binary == false.",
           py::arg("os"),
-          py::arg("binary"))
+          py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
       .def("Start",
         &PyClass::Start)
       .def("Final",
@@ -429,12 +458,14 @@ void pybind_decoder_grammar_fst(py::module& m) {
           "compatibility with other Kaldi read/write functions (it will crash if "
           "binary == false).",
           py::arg("os"),
-          py::arg("binary"))
+          py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
       .def("Read",
         &PyClass::Read,
         "Reads the format that Write() outputs.  Will crash if binary == false.",
           py::arg("os"),
-          py::arg("binary"))
+          py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
       .def("Start",
         &PyClass::Start)
       .def("Final",
@@ -625,19 +656,27 @@ void pybind_decoder_faster_decoder(py::module& m) {
                        py::arg("config"))
       .def("Decode",
         &PyClass::Decode,
-                       py::arg("decodable"))
+                       py::arg("decodable"),
+      py::call_guard<py::gil_scoped_release>())
       .def("ReachedFinal",
         &PyClass::ReachedFinal)
       .def("GetBestPath",
-        &PyClass::GetBestPath,
+           [](PyClass& decoder,
+              bool use_final_probs = true) -> std::pair<bool, Lattice> {
+          py::gil_scoped_release gil_release;
+             Lattice ofst;
+             bool is_succeeded = decoder.GetBestPath(&ofst, use_final_probs);
+              py::gil_scoped_acquire acquire;
+             return std::make_pair(is_succeeded, ofst);
+           },
         "GetBestPath gets the decoding traceback. If \"use_final_probs\" is true "
           "AND we reached a final state, it limits itself to final states; "
           "otherwise it gets the most likely token not taking into account "
           "final-probs. Returns true if the output best path was not the empty "
           "FST (will only return false in unusual circumstances where "
           "no tokens survived).",
-                       py::arg("fst_out"),
-                       py::arg("use_final_probs") = true)
+                       py::arg("use_final_probs") = true,
+                       py::return_value_policy::reference)
       .def("InitDecoding",
         &PyClass::InitDecoding,
         "As a new alternative to Decode(), you can call InitDecoding "
@@ -690,16 +729,24 @@ void pybind_decoder_lattice_biglm_faster_decoder(py::module& m) {
         "says whether a final-state was active on the last frame.  If it was not, the "
           "lattice (or traceback) will end with states that are not final-states.")
       .def("GetBestPath",
-        &PyClass::GetBestPath,
+           [](const PyClass& decoder,
+              bool use_final_probs = true) -> std::pair<bool, Lattice> {
+             Lattice ofst;
+             bool is_succeeded = decoder.GetBestPath(&ofst, use_final_probs);
+             return std::make_pair(is_succeeded, ofst);
+           },
         "Outputs an FST corresponding to the single best path "
           "through the lattice.",
-                       py::arg("ofst"),
                        py::arg("use_final_probs") = true)
       .def("GetRawLattice",
-        &PyClass::GetRawLattice,
+           [](const PyClass& decoder,
+              bool use_final_probs = true) -> std::pair<bool, Lattice> {
+             Lattice ofst;
+             bool is_succeeded = decoder.GetRawLattice(&ofst, use_final_probs);
+             return std::make_pair(is_succeeded, ofst);
+           },
         "Outputs an FST corresponding to the raw, state-level "
           "tracebacks.",
-                       py::arg("ofst"),
                        py::arg("use_final_probs") = true)
       .def("GetLattice",
         &PyClass::GetLattice,
@@ -737,7 +784,12 @@ void pybind_decoder_lattice_faster_online_decoder(py::module& m) {
                        py::arg("config"),
                        py::arg("fst"))
       .def("GetBestPath",
-        &PyClass::GetBestPath,
+           [](const PyClass& decoder,
+              bool use_final_probs = true) -> std::pair<bool, Lattice> {
+             Lattice ofst;
+             bool is_succeeded = decoder.GetBestPath(&ofst, use_final_probs);
+             return std::make_pair(is_succeeded, ofst);
+           },
         "Outputs an FST corresponding to the single best path through the lattice. "
           "This is quite efficient because it doesn't get the entire raw lattice and find "
           "the best path through it; instead, it uses the BestPathEnd and BestPathIterator "
@@ -746,7 +798,6 @@ void pybind_decoder_lattice_faster_online_decoder(py::module& m) {
           "it will become void).  If \"use_final_probs\" is true AND we reached the "
           "final-state of the graph then it will include those as final-probs, else "
           "it will treat all final-probs as one.",
-                       py::arg("ofst"),
                        py::arg("use_final_probs") = true)
       .def("TestGetBestPath",
         &PyClass::TestGetBestPath,
@@ -1061,14 +1112,18 @@ void pybind_decoder_lattice_incremental_online_decoder(py::module& m) {
           py::arg("fst"),
           py::arg("trans_model"))
       .def("GetBestPath",
-        &PyClass::GetBestPath,
+           [](const PyClass& decoder,
+              bool use_final_probs = true) -> std::pair<bool, Lattice> {
+             Lattice ofst;
+             bool is_succeeded = decoder.GetBestPath(&ofst, use_final_probs);
+             return std::make_pair(is_succeeded, ofst);
+           },
         "GetBestPath gets the decoding output.  If \"use_final_probs\" is true "
           "AND we reached a final state, it limits itself to final states; "
           "otherwise it gets the most likely token not taking into "
           "account final-probs.  fst_out will be empty (Start() == kNoStateId) if "
           "nothing was available.  It returns true if it got output (thus, fst_out "
           "will be nonempty).",
-                       py::arg("fst_out"),
                        py::arg("use_final_probs") = true)
       .def("BestPathEnd",
         &PyClass::BestPathEnd,
@@ -1181,24 +1236,32 @@ void pybind_decoder_lattice_simple_decoder(py::module& m) {
           "take it as a good indication that we reached the final-state with "
           "reasonable likelihood.")
       .def("GetBestPath",
-        &PyClass::GetBestPath,
+           [](const PyClass& decoder,
+              bool use_final_probs = true) -> std::pair<bool, Lattice> {
+             Lattice ofst;
+             bool is_succeeded = decoder.GetBestPath(&ofst, use_final_probs);
+             return std::make_pair(is_succeeded, ofst);
+           },
         "Outputs an FST corresponding to the single best path "
           "through the lattice.  Returns true if result is nonempty "
           "(using the return status is deprecated, it will become void). "
           "If \"use_final_probs\" is true AND we reached the final-state "
           "of the graph then it will include those as final-probs, else "
           "it will treat all final-probs as one.",
-          py::arg("lat"),
           py::arg("use_final_probs") = true)
       .def("GetRawLattice",
-        &PyClass::GetRawLattice,
+           [](const PyClass& decoder,
+              bool use_final_probs = true) -> std::pair<bool, Lattice> {
+             Lattice ofst;
+             bool is_succeeded = decoder.GetRawLattice(&ofst, use_final_probs);
+             return std::make_pair(is_succeeded, ofst);
+           },
         "Outputs an FST corresponding to the raw, state-level "
           "tracebacks.  Returns true if result is nonempty "
           "(using the return status is deprecated, it will become void). "
           "If \"use_final_probs\" is true AND we reached the final-state "
           "of the graph then it will include those as final-probs, else "
           "it will treat all final-probs as one.",
-          py::arg("lat"),
           py::arg("use_final_probs") = true)
       .def("GetLattice",
         &PyClass::GetLattice,
@@ -1237,7 +1300,12 @@ void pybind_decoder_simple_decoder(py::module& m) {
       .def("ReachedFinal",
         &PyClass::ReachedFinal)
       .def("GetBestPath",
-        &PyClass::GetBestPath,
+           [](const PyClass& decoder,
+              bool use_final_probs = true) -> std::pair<bool, Lattice> {
+             Lattice ofst;
+             bool is_succeeded = decoder.GetBestPath(&ofst, use_final_probs);
+             return std::make_pair(is_succeeded, ofst);
+           },
         "GetBestPath gets the decoding traceback. If \"use_final_probs\" is true "
           "AND we reached a final state, it limits itself to final states; "
           "otherwise it gets the most likely token not taking into account final-probs. "
@@ -1246,7 +1314,6 @@ void pybind_decoder_simple_decoder(py::module& m) {
           "If Decode() returned true, it is safe to assume GetBestPath will return true. "
           "It returns true if the output lattice was nonempty (i.e. had states in it); "
           "using the return value is deprecated.",
-          py::arg("lat"),
           py::arg("use_final_probs") = true)
       .def("FinalRelativeCost",
         &PyClass::FinalRelativeCost,
@@ -1596,7 +1663,32 @@ void pybind_training_graph_compiler(py::module &m) {
       .def_readwrite("transition_scale", &PyClass::transition_scale)
       .def_readwrite("self_loop_scale", &PyClass::self_loop_scale)
       .def_readwrite("rm_eps", &PyClass::rm_eps)
-      .def_readwrite("reorder", &PyClass::reorder);
+      .def_readwrite("reorder", &PyClass::reorder)
+      .def(py::pickle(
+        [](const TrainingGraphCompilerOptions &p) { // __getstate__
+            /* Return a tuple that fully encodes the state of the object */
+            return py::make_tuple(
+                p.transition_scale,
+                p.self_loop_scale,
+                p.rm_eps,
+                p.reorder);
+        },
+        [](py::tuple t) { // __setstate__
+            if (t.size() != 4)
+                throw std::runtime_error("Invalid state!");
+
+            /* Create a new C++ instance */
+            TrainingGraphCompilerOptions opts;
+
+            /* Assign any additional state */
+            opts.transition_scale = t[0].cast<BaseFloat>();
+            opts.self_loop_scale = t[1].cast<BaseFloat>();
+            opts.rm_eps = t[2].cast<bool>();
+            opts.reorder = t[3].cast<bool>();
+
+            return opts;
+        }
+    ));
   }
   {
      using PyClass = kaldi::TrainingGraphCompiler;
@@ -1631,6 +1723,18 @@ void pybind_training_graph_compiler(py::module &m) {
                py::arg("word_grammar"),
                py::arg("out_fst"))
         .def("CompileGraphFromLG",
+               [](PyClass& gc, const fst::VectorFst<fst::StdArc> &phone2word_fst){
+
+                    VectorFst<StdArc> decode_fst;
+
+                    if (!gc.CompileGraphFromLG(phone2word_fst, &decode_fst)) {
+                         decode_fst.DeleteStates();  // Just make it empty.
+                    }
+                    return decode_fst;
+               },
+               "Same as `CompileGraph`, but uses an external LG fst.",
+               py::arg("phone2word_fst"))
+        .def("CompileGraphFromLG",
                &PyClass::CompileGraphFromLG,
                "Same as `CompileGraph`, but uses an external LG fst.",
                py::arg("phone2word_fst"), py::arg("out_fst"))
@@ -1651,16 +1755,26 @@ void pybind_training_graph_compiler(py::module &m) {
                     if (!gc.CompileGraphFromText(transcript, &decode_fst)) {
                          decode_fst.DeleteStates();  // Just make it empty.
                     }
-                    if (decode_fst.Start() == fst::kNoStateId) {
-                         KALDI_WARN << "Empty decoding graph for utterance";
-                    }
                     return decode_fst;
                },
                py::arg("transcript"))
         .def("CompileGraphsFromText",
-               &PyClass::CompileGraphFromText,
+               &PyClass::CompileGraphsFromText,
                "This function creates FSTs from the text and calls CompileGraphs.",
-               py::arg("word_grammar"), py::arg("out_fst"));
+               py::arg("transcripts"), py::arg("out_fsts"))
+        .def("CompileGraphsFromText",
+
+               [](PyClass& gc, const std::vector<std::vector<int32> > &transcripts){
+
+          py::gil_scoped_release gil_release;
+                    std::vector<fst::VectorFst<fst::StdArc>* > fsts;
+
+                    bool ans = gc.CompileGraphsFromText(transcripts, &fsts);
+                    return fsts;
+               },
+               "This function creates FSTs from the text and calls CompileGraphs.",
+               py::arg("transcripts"),
+                  py::return_value_policy::reference);
         }
 }
 
@@ -1700,6 +1814,66 @@ py::module m = _m.def_submodule("decoder", "pybind for decoder");
   pybind_decodable_matrix_mapped_offset(m);
   pybind_decodable_matrix_scaled(m);
   pybind_training_graph_compiler(m);
+
+  m.def("gmm_latgen_faster",
+          [](LatticeFasterDecoder &decoder, // not const but is really an input.
+    DecodableInterface &decodable, // not const but is really an input.
+    const TransitionInformation &trans_model,
+    double acoustic_scale,
+    bool determinize,
+    bool allow_partial){
+
+  double likelihood;
+  LatticeWeight weight;
+  int32 num_frames;
+    VectorFst<LatticeArc> decoded;
+  Lattice lat;
+    std::vector<int32> alignment;
+    std::vector<int32> words;
+      bool ans = decoder.Decode(&decodable);
+      if (!ans){
+         return py::make_tuple(false, alignment, words, lat);
+      }
+      ans = decoder.ReachedFinal();
+      if (!ans){
+            if (!allow_partial){
+
+                  return py::make_tuple(false, alignment, words, lat);
+            }
+      }
+      decoder.GetBestPath(&decoded);
+    GetLinearSymbolSequence(decoded, &alignment, &words, &weight);
+    likelihood = -(weight.Value1() + weight.Value2());
+  decoder.GetRawLattice(&lat);
+  fst::Connect(&lat);
+  if (determinize) {
+    CompactLattice clat;
+    if (!DeterminizeLatticePhonePrunedWrapper(
+            trans_model,
+            &lat,
+            decoder.GetOptions().lattice_beam,
+            &clat,
+            decoder.GetOptions().det_opts))
+      KALDI_WARN << "Determinization finished earlier than the beam";
+    // We'll write the lattice without acoustic scaling.
+    if (acoustic_scale != 0.0)
+      fst::ScaleLattice(fst::AcousticLatticeScale(1.0 / acoustic_scale), &clat);
+      return py::make_tuple(true, alignment, words, clat);
+  } else {
+    // We'll write the lattice without acoustic scaling.
+    if (acoustic_scale != 0.0)
+      fst::ScaleLattice(fst::AcousticLatticeScale(1.0 / acoustic_scale), &lat);
+      return py::make_tuple(true, alignment, words, lat);
+  }
+
+          },
+        py::arg("decoder"),
+        py::arg("decodable"),
+        py::arg("trans_model"),
+        py::arg("acoustic_scale"),
+        py::arg("determinize"),
+        py::arg("allow_partial")
+        );
 
 
 }

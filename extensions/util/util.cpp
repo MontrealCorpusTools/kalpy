@@ -1,19 +1,30 @@
 
 #include "util/pybind_util.h"
-
+#include <pybind11/iostream.h>
 #include "util/kaldi-table.h"
 #include "util/kaldi-io.h"
 #include "util/kaldi-holder-inl.h"
 #include "util/parse-options.h"
+#include "util/const-integer-set.h"
 #include "itf/options-itf.h"
 
 #include "hmm/transition-model.h"
 #include "tree/context-dep.h"
+#include "matrix/kaldi-matrix.h"
+#include "lm/const-arpa-lm.h"
+
+#include "base/kaldi-error.h"
 
 using namespace kaldi;
 
 
 namespace {
+
+void ignore_logs(const LogMessageEnvelope &envelope,
+                           const char *message){
+                           }
+LogHandler kalpy_log_handler = &ignore_logs;
+LogHandler old_logger = SetLogHandler(*kalpy_log_handler);
 
 template <typename Type>
 struct ArgName;
@@ -69,6 +80,7 @@ void init_util(py::module &_m) {
     using PyClass = Input;
     py::class_<PyClass>(m, "Input")
         .def(py::init<>())
+        .def(py::init<const std::string &, bool *>())
         .def("Open",
              [](PyClass* ki, const std::string& rxfilename,
                 bool read_header = false) -> std::vector<bool> {
@@ -159,25 +171,68 @@ void init_util(py::module &_m) {
              "done in kaldi-table.{h, cc}, so you don't have to worry about "
              "it.");
   }
+  {
+    using PyClass = ConstIntegerSet<int32>;
+    py::class_<PyClass>(m, "ConstIntegerSet")
+        .def(py::init<>())
+        .def(py::init<const std::vector<int32> &>(),
+             py::arg("input"))
+        .def(py::init<const std::set<int32> &>(),
+             py::arg("input"))
+        .def(py::init<const ConstIntegerSet<int32> &>(),
+             py::arg("other"))
+        .def("count", &PyClass::count,
+             py::arg("i"))
+        .def("begin", &PyClass::begin)
+        .def("end", &PyClass::end)
+        .def("size", &PyClass::size)
+        .def("empty", &PyClass::empty)
+        .def("Write", &PyClass::Write,
+             py::arg("os"),
+             py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
+        .def("Read", &PyClass::Read,
+             py::arg("is"),
+             py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>());
+  }
 
 
   pybind_sequential_table_reader<KaldiObjectHolder<Matrix<float>>>(
       m, "SequentialBaseFloatMatrixReader");
 
+  pybind_sequential_table_reader<KaldiObjectHolder<Matrix<double>>>(
+      m, "SequentialBaseDoubleMatrixReader");
+
   pybind_random_access_table_reader<KaldiObjectHolder<Matrix<float>>>(
       m, "RandomAccessBaseFloatMatrixReader");
+
+  pybind_random_access_table_reader<KaldiObjectHolder<Matrix<double>>>(
+      m, "RandomAccessBaseDoubleMatrixReader");
 
   pybind_table_writer<KaldiObjectHolder<Matrix<float>>>(
       m, "BaseFloatMatrixWriter");
 
+  pybind_table_writer<KaldiObjectHolder<Matrix<double>>>(
+      m, "BaseDoubleMatrixWriter");
+
   pybind_sequential_table_reader<KaldiObjectHolder<Vector<float>>>(
       m, "SequentialBaseFloatVectorReader");
+
+  pybind_sequential_table_reader<KaldiObjectHolder<Vector<double>>>(
+      m, "SequentialBaseDoubleVectorReader");
 
   pybind_random_access_table_reader<KaldiObjectHolder<Vector<float>>>(
       m, "RandomAccessBaseFloatVectorReader");
 
+  pybind_random_access_table_reader<KaldiObjectHolder<Vector<double>>>(
+      m, "RandomAccessBaseDoubleVectorReader");
+
   pybind_table_writer<KaldiObjectHolder<Vector<float>>>(
       m, "BaseFloatVectorWriter");
+
+  pybind_table_writer<KaldiObjectHolder<Vector<double>>>(
+      m, "BaseDoubleVectorWriter");
 
   pybind_table_writer<KaldiObjectHolder<CompressedMatrix>>(
       m, "CompressedMatrixWriter");
@@ -189,7 +244,27 @@ void init_util(py::module &_m) {
       m, "RandomAccessInt32VectorReader");
 
   pybind_table_writer<BasicVectorHolder<int32>>(m, "Int32VectorWriter");
+
+  pybind_sequential_table_reader<BasicVectorVectorHolder<int32>>(
+      m, "SequentialInt32VectorVectorReader");
+
+  pybind_random_access_table_reader<BasicVectorVectorHolder<int32>>(
+      m, "RandomAccessInt32VectorVectorReader");
+
+  pybind_table_writer<BasicVectorVectorHolder<int32>>(m, "Int32VectorVectorWriter");
+
+  pybind_sequential_table_reader<BasicHolder<int32>>(
+      m, "SequentialInt32Reader");
+
+  pybind_random_access_table_reader<BasicHolder<int32>>(
+      m, "RandomAccessInt32Reader");
+
+  pybind_table_writer<BasicHolder<int32>>(m, "Int32Writer");
+
     pybind_read_kaldi_object<TransitionModel>(m);
     pybind_read_kaldi_object<ContextDependency>(m);
+    pybind_read_kaldi_object<MatrixBase<float>>(m);
+    pybind_read_kaldi_object<MatrixBase<double>>(m);
+    pybind_read_kaldi_object<ConstArpaLm>(m);
 
 }

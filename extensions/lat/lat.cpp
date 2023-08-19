@@ -18,6 +18,7 @@
 #include "lat/sausages.h"
 #include "lat/word-align-lattice-lexicon.h"
 #include "lat/word-align-lattice.h"
+#include "lm/const-arpa-lm.h"
 
 using namespace kaldi;
 
@@ -240,7 +241,12 @@ void pybind_kaldi_functions_transition_model(py::module& m) {
 void pybind_lat_kaldi_functions(py::module& m) {
 
   m.def("GetPerFrameAcousticCosts",
-        &GetPerFrameAcousticCosts,
+           [](const fst::VectorFst<LatticeArc> &decoded) -> Vector<BaseFloat> {
+          py::gil_scoped_release release;
+            Vector<BaseFloat> per_frame_loglikes;
+             GetPerFrameAcousticCosts(decoded, &per_frame_loglikes);
+             return per_frame_loglikes;
+           },
         "This function extracts the per-frame log likelihoods from a linear "
         "lattice (which we refer to as an 'nbest' lattice elsewhere in Kaldi code). "
         "The dimension of *per_frame_loglikes will be set to the "
@@ -254,8 +260,7 @@ void pybind_lat_kaldi_functions(py::module& m) {
         "preceding input symbol, or the following input symbol for input-epsilons "
         "encountered prior to any input symbol.  If 'nbest' has no input symbols, "
         "'per_frame_loglikes' will be set to the empty vector.",
-        py::arg("nbest"),
-        py::arg("per_frame_loglikes"));
+        py::arg("nbest"));
 
   m.def("LatticeStateTimes",
         &LatticeStateTimes,
@@ -470,8 +475,13 @@ void pybind_lat_kaldi_functions(py::module& m) {
         py::arg("criterion"),
         py::arg("one_silence_class"),
         py::arg("post"));
+
   m.def("CompactLatticeToWordAlignment",
-        &CompactLatticeToWordAlignment,
+        [](const CompactLattice& clat) {
+            std::vector<int32> words, times, lengths;
+            bool ans = CompactLatticeToWordAlignment(clat, &words, &times, &lengths);
+             return py::make_tuple(ans, words, times, lengths);
+           },
         "This function takes a CompactLattice that should only contain a single "
         "linear sequence (e.g. derived from lattice-1best), and that should have been "
         "processed so that the arcs in the CompactLattice align correctly with the "
@@ -483,10 +493,7 @@ void pybind_lat_kaldi_functions(py::module& m) {
         "This function will print a warning and return false, if the lattice "
         "did not have the correct format (e.g. if it is empty or it is not "
         "linear).",
-        py::arg("clat"),
-        py::arg("words"),
-        py::arg("begin_times"),
-        py::arg("lengths"));
+        py::arg("clat"));
   m.def("CompactLatticeShortestPath",
         &CompactLatticeShortestPath,
         "A form of the shortest-path/best-path algorithm that's specially coded for "
@@ -1091,13 +1098,19 @@ void pybind_determinize_lattice_pruned(py::module& m) {
 
 void pybind_kaldi_lattice(py::module& m) {
   pybind_arc_impl<LatticeWeight>(m, "LatticeArc");
-  pybind_vector_fst_impl<LatticeArc>(m, "Lattice");
+  pybind_fst_impl<LatticeArc>(m, "LatticeBase");
+  pybind_expanded_fst_impl<LatticeArc>(m, "LatticeExpandedBase");
+  pybind_mutable_fst_impl<LatticeArc>(m, "LatticeMutableBase");
+  pybind_lattice_fst_impl<LatticeArc>(m, "Lattice");
   pybind_state_iterator_impl<Lattice>(m, "LatticeStateIterator");
   pybind_arc_iterator_impl<Lattice>(m, "LatticeArcIterator");
   pybind_mutable_arc_iterator_impl<Lattice>(m, "LatticeMutableArcIterator");
 
   pybind_arc_impl<CompactLatticeWeight>(m, "CompactLatticeArc");
-  pybind_vector_fst_impl<CompactLatticeArc>(m, "CompactLattice");
+  pybind_fst_impl<CompactLatticeArc>(m, "CompactLatticeBase");
+  pybind_expanded_fst_impl<CompactLatticeArc>(m, "CompactLatticeExpandedBase");
+  pybind_mutable_fst_impl<CompactLatticeArc>(m, "CompactLatticeMutableBase");
+  pybind_lattice_fst_impl<CompactLatticeArc>(m, "CompactLattice");
   pybind_state_iterator_impl<CompactLattice>(m, "CompactLatticeStateIterator");
   pybind_arc_iterator_impl<CompactLattice>(m, "CompactLatticeArcIterator");
   pybind_mutable_arc_iterator_impl<CompactLattice>(
@@ -1145,10 +1158,13 @@ void pybind_kaldi_lattice(py::module& m) {
     py::class_<PyClass>(m, "LatticeHolder")
         .def(py::init<>())
         .def_static("Write", &PyClass::Write, py::arg("os"), py::arg("binary"),
-                    py::arg("t"))
-        .def("Read", &PyClass::Read, py::arg("is"))
+                    py::arg("t"),
+      py::call_guard<py::gil_scoped_release>())
+        .def("Read", &PyClass::Read, py::arg("is"),
+      py::call_guard<py::gil_scoped_release>())
         .def_static("IsReadInBinary", &PyClass::IsReadInBinary)
-        .def("Value", &PyClass::Value, py::return_value_policy::reference)
+        .def("Value", &PyClass::Value, py::return_value_policy::reference,
+      py::call_guard<py::gil_scoped_release>())
         .def("Clear", &PyClass::Clear);
     // TODO(fangjun): other methods can be wrapped when needed
   }
@@ -1157,10 +1173,13 @@ void pybind_kaldi_lattice(py::module& m) {
     py::class_<PyClass>(m, "CompactLatticeHolder")
         .def(py::init<>())
         .def_static("Write", &PyClass::Write, py::arg("os"), py::arg("binary"),
-                    py::arg("t"))
-        .def("Read", &PyClass::Read, py::arg("is"))
+                    py::arg("t"),
+      py::call_guard<py::gil_scoped_release>())
+        .def("Read", &PyClass::Read, py::arg("is"),
+      py::call_guard<py::gil_scoped_release>())
         .def_static("IsReadInBinary", &PyClass::IsReadInBinary)
-        .def("Value", &PyClass::Value, py::return_value_policy::reference)
+        .def("Value", &PyClass::Value, py::return_value_policy::reference,
+      py::call_guard<py::gil_scoped_release>())
         .def("Clear", &PyClass::Clear);
     // TODO(fangjun): other methods can be wrapped when needed
   }
@@ -1197,4 +1216,306 @@ void init_lat(py::module &_m) {
     pybind_lat_sausages(m);
     pybind_lat_word_align_lattice_lexicon(m);
     pybind_lat_word_align_lattice(m);
+
+    m.def("linear_to_lattice",
+            [](
+            const std::vector<int32> &ali,
+                           const std::vector<int32> &words,
+                           BaseFloat lm_cost = 0.0,
+                           BaseFloat ac_cost = 0.0
+            ) -> CompactLattice {
+                  Lattice lat_out;
+                  CompactLattice clat;
+            typedef LatticeArc::StateId StateId;
+            typedef LatticeArc::Weight Weight;
+            typedef LatticeArc::Label Label;
+            lat_out.DeleteStates();
+            StateId cur_state = lat_out.AddState(); // will be 0.
+            lat_out.SetStart(cur_state);
+            for (size_t i = 0; i < ali.size() || i < words.size(); i++) {
+            Label ilabel = (i < ali.size()  ? ali[i] : 0);
+            Label olabel = (i < words.size()  ? words[i] : 0);
+            StateId next_state = lat_out.AddState();
+            lat_out.AddArc(cur_state,
+                              LatticeArc(ilabel, olabel, Weight::One(), next_state));
+            cur_state = next_state;
+            }
+            lat_out.SetFinal(cur_state, Weight(lm_cost, ac_cost));
+            ConvertLattice(lat_out, &clat);
+            return clat;
+            },
+                  py::arg("ali"),
+                  py::arg("words"),
+                  py::arg("lm_cost") = 0.0,
+                  py::arg("ac_cost") = 0.0);
+
+    m.def("word_align_lattice_lexicon",
+            [](
+            const CompactLattice &clat,
+            const TransitionModel &tmodel,
+            const WordAlignLatticeLexiconInfo &lexicon_info,
+            const WordAlignLatticeLexiconOpts &opts
+            ) {
+
+      CompactLattice aligned_clat;
+      bool ok = WordAlignLatticeLexicon(clat, tmodel, lexicon_info, opts,
+                                        &aligned_clat);
+            return py::make_tuple(ok, aligned_clat);
+            },
+                  py::arg("clat"),
+                  py::arg("tmodel"),
+                  py::arg("lexicon_info"),
+                  py::arg("opts"));
+
+    m.def("lattice_best_path",
+            [](
+            CompactLattice &clat,
+            BaseFloat lm_scale = 1.0,
+            BaseFloat acoustic_scale = 1.0
+            ) {
+
+      fst::ScaleLattice(fst::LatticeScale(lm_scale, acoustic_scale), &clat);
+      CompactLattice clat_best_path;
+      CompactLatticeShortestPath(clat, &clat_best_path);  // A specialized
+      // implementation of shortest-path for CompactLattice.
+      Lattice best_path;
+      ConvertLattice(clat_best_path, &best_path);
+      return best_path;
+
+            },
+                  py::arg("clat"),
+                  py::arg("lm_scale") = 1.0,
+                  py::arg("acoustic_scale") = 1.0);
+
+    m.def("lattice_to_post",
+            [](
+            CompactLattice &clat,
+            BaseFloat beam = 10.0,
+            BaseFloat acoustic_scale = 1.0,
+            bool minimize = false
+            ) {
+                  fst::DeterminizeLatticePrunedOptions opts;
+                  opts.max_mem = 50000000;
+                  opts.max_loop = 0; // was 500000;
+                  Lattice lat;
+                  ConvertLattice(clat, &lat);
+                  Invert(&lat);
+                  fst::ScaleLattice(fst::AcousticLatticeScale(acoustic_scale), &lat);
+                  TopSort(&lat);
+                  fst::ArcSort(&lat, fst::ILabelCompare<LatticeArc>());
+                  CompactLattice det_clat;
+                  DeterminizeLatticePruned(lat, beam, &det_clat, opts);
+                  fst::Connect(&det_clat);
+                  if (minimize) {
+                  PushCompactLatticeStrings(&det_clat);
+                  PushCompactLatticeWeights(&det_clat);
+                  MinimizeCompactLattice(&det_clat);
+                  }
+                  TopSortCompactLatticeIfNeeded(&det_clat);
+                  fst::ScaleLattice(fst::AcousticLatticeScale(1.0/acoustic_scale), &det_clat);
+                  return det_clat;
+            },
+                  py::arg("clat"),
+                  py::arg("beam") = 10.0,
+                  py::arg("acoustic_scale") = 1.0,
+                  py::arg("minimize") = false,
+           py::return_value_policy::take_ownership);
+
+
+    m.def("lattice_determinize_pruned",
+            [](
+            const Lattice &lat
+            ) {
+            Posterior post;
+            double lat_like = LatticeForwardBackward(lat, &post);
+            return py::make_tuple(post, lat_like);
+            },
+                  py::arg("lat"),
+           py::return_value_policy::take_ownership);
+
+    m.def("lm_rescore",
+            [](
+                  CompactLattice &clat,
+                  VectorFst<StdArc> *lm_to_subtract_fst,
+                  VectorFst<StdArc> *lm_to_add_fst,
+            const ComposeLatticePrunedOptions &compose_opts,
+                  BaseFloat lm_scale = 1.0,
+             BaseFloat acoustic_scale = 1.0
+            ) {
+                  if (lm_to_subtract_fst->Properties(fst::kAcceptor, true) == 0) {
+                  // If it's not already an acceptor, project on the output, i.e. copy olabels
+                  // to ilabels.  Generally the G.fst's on disk will have the disambiguation
+                  // symbol #0 on the input symbols of the backoff arc, and projection will
+                  // replace them with epsilons which is what is on the output symbols of
+                  // those arcs.
+                  fst::Project(lm_to_subtract_fst, fst::PROJECT_OUTPUT);
+                  }
+                  if (lm_to_subtract_fst->Properties(fst::kILabelSorted, true) == 0) {
+                  // Make sure LM is sorted on ilabel.
+                  fst::ILabelCompare<fst::StdArc> ilabel_comp;
+                  fst::ArcSort(lm_to_subtract_fst, ilabel_comp);
+                  }
+                  fst::BackoffDeterministicOnDemandFst<StdArc> lm_to_subtract_det_backoff(
+                        *lm_to_subtract_fst);
+                  fst::ScaleDeterministicOnDemandFst lm_to_subtract_det_scale(
+                        -lm_scale, &lm_to_subtract_det_backoff);
+
+
+                  if (lm_to_add_fst->Properties(fst::kAcceptor, true) == 0) {
+                  // If it's not already an acceptor, project on the output, i.e. copy olabels
+                  // to ilabels.  Generally the G.fst's on disk will have the disambiguation
+                  // symbol #0 on the input symbols of the backoff arc, and projection will
+                  // replace them with epsilons which is what is on the output symbols of
+                  // those arcs.
+                  fst::Project(lm_to_add_fst, fst::PROJECT_OUTPUT);
+                  }
+                  if (lm_to_add_fst->Properties(fst::kILabelSorted, true) == 0) {
+                  // Make sure LM is sorted on ilabel.
+                  fst::ILabelCompare<fst::StdArc> ilabel_comp;
+                  fst::ArcSort(lm_to_add_fst, ilabel_comp);
+                  }
+
+                  fst::BackoffDeterministicOnDemandFst<StdArc>
+                        lm_to_add(
+                        *lm_to_add_fst);
+
+                  if (acoustic_scale != 1.0) {
+                  fst::ScaleLattice(fst::AcousticLatticeScale(acoustic_scale), &clat);
+                  }
+                  TopSortCompactLatticeIfNeeded(&clat);
+                  fst::ComposeDeterministicOnDemandFst<StdArc> combined_lms(
+                  &lm_to_subtract_det_scale, &lm_to_add);
+                  CompactLattice composed_clat;
+                  ComposeCompactLatticePruned(compose_opts,
+                                          clat,
+                                          &combined_lms,
+                                          &composed_clat);
+
+                  if (composed_clat.NumStates() > 0) {
+
+                        if (acoustic_scale != 1.0) {
+                              fst::ScaleLattice(fst::AcousticLatticeScale(1.0 / acoustic_scale),
+                                          &composed_clat);
+                        }
+                  }
+                  return composed_clat;
+
+            },
+                  py::arg("clat"),
+                  py::arg("lm_to_subtract_fst"),
+                  py::arg("lm_to_add_fst"),
+                  py::arg("compose_opts"),
+                  py::arg("lm_scale") = 1.0,
+                  py::arg("acoustic_scale") = 1.0);
+
+    m.def("lm_rescore_carpa",
+            [](
+                  CompactLattice &clat,
+                  VectorFst<StdArc> *lm_to_subtract_fst,
+                  ConstArpaLm &const_arpa,
+            const ComposeLatticePrunedOptions &compose_opts,
+                  BaseFloat lm_scale = 1.0,
+             BaseFloat acoustic_scale = 1.0
+            ) {
+                  if (lm_to_subtract_fst->Properties(fst::kAcceptor, true) == 0) {
+                  // If it's not already an acceptor, project on the output, i.e. copy olabels
+                  // to ilabels.  Generally the G.fst's on disk will have the disambiguation
+                  // symbol #0 on the input symbols of the backoff arc, and projection will
+                  // replace them with epsilons which is what is on the output symbols of
+                  // those arcs.
+                  fst::Project(lm_to_subtract_fst, fst::PROJECT_OUTPUT);
+                  }
+                  if (lm_to_subtract_fst->Properties(fst::kILabelSorted, true) == 0) {
+                  // Make sure LM is sorted on ilabel.
+                  fst::ILabelCompare<fst::StdArc> ilabel_comp;
+                  fst::ArcSort(lm_to_subtract_fst, ilabel_comp);
+                  }
+                  fst::BackoffDeterministicOnDemandFst<StdArc> lm_to_subtract_det_backoff(
+                        *lm_to_subtract_fst);
+                  fst::ScaleDeterministicOnDemandFst lm_to_subtract_det_scale(
+                        -lm_scale, &lm_to_subtract_det_backoff);
+
+
+                  ConstArpaLmDeterministicFst lm_to_add(const_arpa);
+
+                  if (acoustic_scale != 1.0) {
+                  fst::ScaleLattice(fst::AcousticLatticeScale(acoustic_scale), &clat);
+                  }
+                  TopSortCompactLatticeIfNeeded(&clat);
+                  fst::ComposeDeterministicOnDemandFst<StdArc> combined_lms(
+                  &lm_to_subtract_det_scale, &lm_to_add);
+                  CompactLattice composed_clat;
+                  ComposeCompactLatticePruned(compose_opts,
+                                          clat,
+                                          &combined_lms,
+                                          &composed_clat);
+
+                  if (composed_clat.NumStates() > 0) {
+
+                        if (acoustic_scale != 1.0) {
+                              fst::ScaleLattice(fst::AcousticLatticeScale(1.0 / acoustic_scale),
+                                          &composed_clat);
+                        }
+                  }
+                  return composed_clat;
+
+            },
+                  py::arg("clat"),
+                  py::arg("lm_to_subtract_fst"),
+                  py::arg("const_arpa"),
+                  py::arg("compose_opts"),
+                  py::arg("lm_scale") = 1.0,
+                  py::arg("acoustic_scale") = 1.0);
+
+    m.def("load_fst_for_subtract",
+            [](
+                  VectorFst<StdArc> *lm_to_subtract_fst,
+                  BaseFloat lm_scale = 1.0
+            ) {
+                  if (lm_to_subtract_fst->Properties(fst::kAcceptor, true) == 0) {
+                  // If it's not already an acceptor, project on the output, i.e. copy olabels
+                  // to ilabels.  Generally the G.fst's on disk will have the disambiguation
+                  // symbol #0 on the input symbols of the backoff arc, and projection will
+                  // replace them with epsilons which is what is on the output symbols of
+                  // those arcs.
+                  fst::Project(lm_to_subtract_fst, fst::PROJECT_OUTPUT);
+                  }
+                  if (lm_to_subtract_fst->Properties(fst::kILabelSorted, true) == 0) {
+                  // Make sure LM is sorted on ilabel.
+                  fst::ILabelCompare<fst::StdArc> ilabel_comp;
+                  fst::ArcSort(lm_to_subtract_fst, ilabel_comp);
+                  }
+                  fst::BackoffDeterministicOnDemandFst<StdArc> lm_to_subtract_det_backoff(
+                        *lm_to_subtract_fst);
+                  fst::ScaleDeterministicOnDemandFst lm_to_subtract_det_scale(
+                        -lm_scale, &lm_to_subtract_det_backoff);
+                  return lm_to_subtract_det_scale;
+            },
+                  py::arg("lm_to_subtract_fst"),
+                  py::arg("lm_scale") = 1.0);
+
+    m.def("load_fst_for_add",
+            [](
+                  VectorFst<StdArc> *lm_to_add_fst
+            ) {
+                  BaseFloat lm_scale = 1.0;
+                  if (lm_to_add_fst->Properties(fst::kAcceptor, true) == 0) {
+                  // If it's not already an acceptor, project on the output, i.e. copy olabels
+                  // to ilabels.  Generally the G.fst's on disk will have the disambiguation
+                  // symbol #0 on the input symbols of the backoff arc, and projection will
+                  // replace them with epsilons which is what is on the output symbols of
+                  // those arcs.
+                  fst::Project(lm_to_add_fst, fst::PROJECT_OUTPUT);
+                  }
+                  if (lm_to_add_fst->Properties(fst::kILabelSorted, true) == 0) {
+                  // Make sure LM is sorted on ilabel.
+                  fst::ILabelCompare<fst::StdArc> ilabel_comp;
+                  fst::ArcSort(lm_to_add_fst, ilabel_comp);
+                  }
+                  fst::BackoffDeterministicOnDemandFst<StdArc>
+                        lm_to_add(
+                        *lm_to_add_fst);
+                  return lm_to_add;
+            },
+                  py::arg("lm_to_add_fst"));
 }

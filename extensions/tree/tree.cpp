@@ -8,6 +8,7 @@
 #include "tree/context-dep.h"
 #include "tree/event-map.h"
 #include "tree/tree-renderer.h"
+#include "hmm/hmm-topology.h"
 
 using namespace kaldi;
 
@@ -98,9 +99,11 @@ void pybind_event_map(py::module& m) {
       "for overview.");
   event_map.def(py::init<>());
   event_map
-      .def_static("Read", &EventMap::Read, py::arg("is"), py::arg("binary"))
+      .def_static("Read", &EventMap::Read, py::arg("is"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
       .def_static("Write", py::overload_cast<std::ostream &, bool, EventMap *>(&EventMap::Write),
-                    py::arg("os"), py::arg("binary"), py::arg("emap"));
+                    py::arg("os"), py::arg("binary"), py::arg("emap"),
+      py::call_guard<py::gil_scoped_release>());
   {
     using PyClass = ConstantEventMap;
 
@@ -157,10 +160,12 @@ void pybind_build_tree_questions(py::module& m) {
         .def("Check", &PyClass::Check)
         .def("Read", &PyClass::Read,
           py::arg("is"),
-          py::arg("binary"))
+          py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
         .def("Write", &PyClass::Write,
           py::arg("os"),
-          py::arg("binary"));
+          py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>());
   }
 
   {
@@ -180,8 +185,10 @@ void pybind_build_tree_questions(py::module& m) {
         .def("HasQuestionsForKey", &PyClass::HasQuestionsForKey, py::arg("key"))
         .def("InitRand", &PyClass::InitRand, py::arg("stats"), py::arg("num_quest"),
                                     py::arg("num_iters_refine"), py::arg("all_keys_type"))
-        .def("Write", &PyClass::Write, py::arg("os"), py::arg("binary"))
-        .def("Read", &PyClass::Read, py::arg("is"), py::arg("binary"));
+        .def("Write", &PyClass::Write, py::arg("os"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
+        .def("Read", &PyClass::Read, py::arg("is"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>());
   }
 }
 
@@ -501,7 +508,7 @@ void pybind_build_tree(py::module& m) {
         " @param phone_sets [in] Each element of phone_sets is a set of phones whose "
         "               roots are shared together (prior to decision-tree splitting). "
         " @param phone2num_pdf_classes [in] A map from phones to the number of "
-        "               \ref pdf_class \"pdf-classes\" "
+        "               \\ref pdf_class \"pdf-classes\" "
         "               in the phone (this info is derived from the HmmTopology object) "
         " @param share_roots [in] A vector the same size as phone_sets; says for each "
         "              phone set whether the root should be shared among all the "
@@ -568,7 +575,7 @@ void pybind_build_tree(py::module& m) {
         "@param phone_sets [in] Each element of phone_sets is a set of phones whose "
         "               roots are shared together (prior to decision-tree splitting). "
         "@param phone2num_pdf_classes [in] A map from phones to the number of "
-        "               \ref pdf_class \"pdf-classes\" "
+        "               \\ref pdf_class \"pdf-classes\" "
         "               in the phone (this info is derived from the HmmTopology object) "
         "@param share_roots [in] A vector the same size as phone_sets; says for each "
         "              phone set whether the root should be shared among all the "
@@ -661,7 +668,7 @@ void pybind_build_tree(py::module& m) {
         "     The output sets will be various unions of these sets.  These sets "
         "     will normally correspond to \"real phones\", in cases where the phones "
         "     have stress and position markings. "
-        "  @param all_pdf_classes_in [in] All the \ref pdf_class \"pdf-classes\" "
+        "  @param all_pdf_classes_in [in] All the \\ref pdf_class \"pdf-classes\" "
         "    that we consider for clustering.  In the normal case this is the singleton "
         "     set {1}, which means that we only consider the central hmm-position "
         "     of the standard 3-state HMM, for clustering purposes. "
@@ -673,6 +680,41 @@ void pybind_build_tree(py::module& m) {
         py::arg("all_pdf_classes_in"),
         py::arg("P"),
         py::arg("questions_out"));
+
+  m.def("automatically_obtain_questions",
+        [](BuildTreeStatsType &stats,
+                                  const std::vector<std::vector<int32> > &phone_sets_in,
+                                  const std::vector<int32> &all_pdf_classes_in,
+                                  int32 P){
+          py::gil_scoped_release gil_release;
+    std::vector<std::vector<int32> > phone_sets_out;
+      AutomaticallyObtainQuestions(stats,
+                                   phone_sets_in,
+                                   all_pdf_classes_in,
+                                   P,
+                                   &phone_sets_out);
+            return phone_sets_out;
+        },
+        "Outputs sets of phones that are reasonable for questions "
+        "to ask in the tree-building algorithm.  These are obtained by tree "
+        "clustering of the phones; for each node in the tree, all the leaves "
+        "accessible from that node form one of the sets of phones. "
+        "  @param stats [in] The statistics as used for normal tree-building. "
+        "  @param phone_sets_in [in] All the phones, pre-partitioned into sets. "
+        "     The output sets will be various unions of these sets.  These sets "
+        "     will normally correspond to \"real phones\", in cases where the phones "
+        "     have stress and position markings. "
+        "  @param all_pdf_classes_in [in] All the \\ref pdf_class \"pdf-classes\" "
+        "    that we consider for clustering.  In the normal case this is the singleton "
+        "     set {1}, which means that we only consider the central hmm-position "
+        "     of the standard 3-state HMM, for clustering purposes. "
+        "  @param P [in] The central position in the phone context window; normally "
+        "     1 for triphone system.s "
+        "  @param questions_out [out] The questions (sets of phones) are output to here.",
+        py::arg("stats"),
+        py::arg("phone_sets_in"),
+        py::arg("all_pdf_classes_in"),
+        py::arg("P"));
 
   m.def("KMeansClusterPhones",
         &KMeansClusterPhones,
@@ -801,8 +843,10 @@ void pybind_cluster_utils(py::module& m) {
            py::arg("top_n_in"))
       .def_readwrite("num_iters", &PyClass::num_iters)
       .def_readwrite("top_n", &PyClass::top_n)
-        .def("Read", &PyClass::Read, py::arg("is"), py::arg("binary"))
-        .def("Write", &PyClass::Read, py::arg("os"), py::arg("binary"));
+        .def("Read", &PyClass::Read, py::arg("is"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
+        .def("Write", &PyClass::Read, py::arg("os"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>());
     }
   m.def("RefineClusters",
         &RefineClusters,
@@ -958,7 +1002,30 @@ void pybind_clusterable_classes(py::module& m) {
         m, "ScalarClusterable");
 
     auto gauss_clusterable = py::class_<GaussClusterable, Clusterable>(
-        m, "GaussClusterable");
+        m, "GaussClusterable")
+      .def(py::pickle(
+        [](const GaussClusterable &p) { // __getstate__
+            /* Return a tuple that fully encodes the state of the object */
+             std::ostringstream os;
+             bool binary = true;
+             p.Write(os, binary);
+            return py::make_tuple(
+                    py::bytes(os.str()));
+        },
+        [](py::tuple t) { // __setstate__
+            if (t.size() != 1)
+                throw std::runtime_error("Invalid state!");
+
+            /* Create a new C++ instance */
+            GaussClusterable p;
+
+            /* Assign any additional state */
+            std::istringstream str(t[0].cast<std::string>());
+               Clusterable *gc = p.ReadNew(str, true);
+
+            return reinterpret_cast<GaussClusterable*>(gc);
+        }
+    ));
 
     auto vector_clusterable = py::class_<VectorClusterable, Clusterable>(
         m, "VectorClusterable");
@@ -967,7 +1034,7 @@ void pybind_clusterable_classes(py::module& m) {
 
 void pybind_context_dep(py::module& m) {
   using PyClass = ContextDependency;
-    auto context_dependency = py::class_<PyClass>(
+    auto context_dependency = py::class_<PyClass, ContextDependencyInterface>(
         m, "ContextDependency",
         "ContextDependency is quite a generic decision tree."
         "\n"
@@ -986,14 +1053,16 @@ void pybind_context_dep(py::module& m) {
     context_dependency.def(py::init<>())
       .def(py::init<int32, int32, EventMap *>(), py::arg("N"),
            py::arg("P"), py::arg("to_pdf"))
-        .def_static("read_from_file",[](const std::string file_path){
-
-                  static ContextDependency ctx_dep;
+           .def(py::init([](std::string file_path){
+                  ContextDependency ctx_dep;
                   ReadKaldiObject(file_path, &ctx_dep);
-                  return &ctx_dep;
-              }, py::arg("file_path"))
-        .def("Read", &PyClass::Read, py::arg("is"), py::arg("binary"))
-        .def("Write", &PyClass::Write, py::arg("os"), py::arg("binary"))
+                  return &ctx_dep;}),
+                  py::arg("file_path"),
+                  py::return_value_policy::reference)
+        .def("Read", &PyClass::Read, py::arg("is"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
+        .def("Write", &PyClass::Write, py::arg("os"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
         .def("ContextWidth", &PyClass::ContextWidth)
         .def("CentralPosition", &PyClass::CentralPosition)
         .def("NumPdfs", &PyClass::NumPdfs)
@@ -1005,7 +1074,84 @@ void pybind_context_dep(py::module& m) {
           bool binary = false;
           cd.Write(os, binary);
           return os.str();
-        });
+        })
+      .def(py::pickle(
+        [](const PyClass &p) { // __getstate__
+            /* Return a tuple that fully encodes the state of the object */
+             std::ostringstream os;
+             bool binary = true;
+             p.Write(os, binary);
+            return py::make_tuple(
+                    py::bytes(os.str()));
+        },
+        [](py::tuple t) { // __setstate__
+            if (t.size() != 1)
+                throw std::runtime_error("Invalid state!");
+
+            /* Create a new C++ instance */
+            PyClass *p = new PyClass();
+
+            /* Assign any additional state */
+            std::istringstream str(t[0].cast<std::string>());
+               p->Read(str, true);
+
+            return p;
+        }
+    ));
+
+  m.def(
+      "GenRandContextDependency",
+      &GenRandContextDependency,
+      "GenRandContextDependency is mainly of use for debugging.  Phones must be sorted and uniq "
+      "on input. "
+      "@param phones [in] A vector of phone id's [must be sorted and uniq]. "
+      "@param ensure_all_covered [in] boolean argument; if true,  GenRandContextDependency "
+      "       generates a context-dependency object that \"works\" for all phones [no gaps]. "
+      "@param num_pdf_classes [out] outputs a vector indexed by phone, of the number "
+      "         of pdf classes (e.g. states) for that phone. "
+      "@return Returns the a context dependency object.",
+      py::arg("phones"),
+      py::arg("ensure_all_covered"),
+      py::arg("num_pdf_classes"));
+
+  m.def(
+      "GenRandContextDependencyLarge",
+      &GenRandContextDependencyLarge,
+      "GenRandContextDependencyLarge is like GenRandContextDependency but generates a larger tree "
+      "with specified N and P for use in \"one-time\" larger-scale tests",
+      py::arg("phones"),
+      py::arg("N"),
+      py::arg("P"),
+      py::arg("ensure_all_covered"),
+      py::arg("num_pdf_classes"));
+
+  m.def(
+      "MonophoneContextDependency",
+      &MonophoneContextDependency,
+      "MonophoneContextDependency() returns a new ContextDependency object that "
+      "corresponds to a monophone system. "
+      "The map phone2num_pdf_classes maps from the phone id to the number of "
+      "pdf-classes we have for that phone (e.g. 3, so the pdf-classes would be "
+      "0, 1, 2).",
+      py::arg("phones"),
+      py::arg("phone2num_pdf_classes"));
+
+  m.def(
+      "MonophoneContextDependencyShared",
+      [](
+         const std::vector<std::vector<int32> > &phone_sets,
+         const std::vector<int32> &phone2num_pdf_classes
+      ) -> ContextDependency* {
+
+    ContextDependency *ctx_dep = MonophoneContextDependencyShared(phone_sets, phone2num_pdf_classes);
+
+    return ctx_dep;
+      },
+      "MonophoneContextDependencyShared is as MonophoneContextDependency but lets "
+ "you define classes of phones which share pdfs (e.g. different stress-markers of a single "
+ "phone.)  Each element of phone_classes is a set of phones that are in that class.",
+      py::arg("phone_classes"),
+      py::arg("phone2num_pdf_classes"), py::return_value_policy::take_ownership);
 }
 
 void init_tree(py::module &_m) {
@@ -1018,4 +1164,174 @@ void init_tree(py::module &_m) {
   pybind_cluster_utils(m);
   pybind_clusterable_classes(m);
   pybind_context_dep(m);
+
+
+    m.def("build_tree",
+          [](
+          const HmmTopology &topo,
+                      std::vector<std::vector<int32> > questions,
+                  BuildTreeStatsType stats,
+                      std::string roots_filename,
+                      std::string tree_out_filename,
+                      int32 num_iters_refine = 0,
+                      int32 P = 1,
+                      int32 N = 3,
+
+                  BaseFloat thresh = 300.0,
+                  BaseFloat cluster_thresh = -1.0,
+                  int32 max_leaves = 0,
+                  bool round_num_leaves = true
+          ){
+            bool binary = true;
+            std::vector<std::vector<int32> > phone_sets;
+            std::vector<bool> is_shared_root;
+            std::vector<bool> is_split_root;
+            {
+                  Input ki(roots_filename.c_str());
+                  ReadRootsFile(ki.Stream(), &phone_sets, &is_shared_root, &is_split_root);
+            }
+          for (size_t i = 0; i < questions.size(); i++) {
+                  std::sort(questions[i].begin(), questions[i].end());
+                  if (!IsSortedAndUniq(questions[i]))
+                  KALDI_ERR << "Questions contain duplicate phones";
+            }
+            size_t nq = static_cast<int32>(questions.size());
+            SortAndUniq(&questions);
+            if (questions.size() != nq)
+                  KALDI_WARN << (nq-questions.size())
+                        << " duplicate questions present";
+
+            // ProcessTopo checks that all phones in the topo are
+            // represented in at least one questions (else warns), and
+            // returns the max # pdf classes in any given phone (normally
+            // 3).
+            std::vector<int32> seen_phones;  // ids of phones seen in questions.
+            for (size_t i = 0; i < questions.size(); i++)
+            for (size_t j= 0; j < questions[i].size(); j++) seen_phones.push_back(questions[i][j]);
+            SortAndUniq(&seen_phones);
+            // topo_phones is also sorted and uniq; a list of phones defined in the topology.
+            const std::vector<int32> &topo_phones = topo.GetPhones();
+            if (seen_phones != topo_phones) {
+            std::ostringstream ss_seen, ss_topo;
+            WriteIntegerVector(ss_seen, false, seen_phones);
+            WriteIntegerVector(ss_topo, false, topo_phones);
+            KALDI_WARN << "ProcessTopo: phones seen in questions differ from those in topology: "
+                        << ss_seen.str() << " vs. " << ss_topo.str();
+            if (seen_phones.size() > topo_phones.size()) {
+                  KALDI_ERR << "ProcessTopo: phones are asked about that are undefined in the topology.";
+            } // we accept the reverse (not asking about all phones), even though it's very bad.
+            }
+
+            int32 max_num_pdf_classes = 0;
+            for (size_t i = 0; i < topo_phones.size(); i++) {
+            int32 p = topo_phones[i];
+            int32 num_pdf_classes = topo.NumPdfClasses(p);
+            max_num_pdf_classes = std::max(num_pdf_classes, max_num_pdf_classes);
+            }
+            KALDI_LOG << "Max # pdf classes is " << max_num_pdf_classes;
+
+            Questions qo;
+
+            QuestionsForKey phone_opts(num_iters_refine);
+            // the questions-options corresponding to keys 0, 1, .. N-1 which
+            // represent the phonetic context positions (including the central phone).
+            for (int32 n = 0; n < N; n++) {
+                  KALDI_LOG << "Setting questions for phonetic-context position "<< n;
+                  phone_opts.initial_questions = questions;
+                  qo.SetQuestionsOf(n, phone_opts);
+            }
+
+            QuestionsForKey pdfclass_opts(num_iters_refine);
+            std::vector<std::vector<int32> > pdfclass_questions(max_num_pdf_classes-1);
+            for (int32 i = 0; i < max_num_pdf_classes - 1; i++)
+                  for (int32 j = 0; j <= i; j++)
+                  pdfclass_questions[i].push_back(j);
+            // E.g. if max_num_pdf_classes == 3,  pdfclass_questions is now [ [0], [0, 1] ].
+            pdfclass_opts.initial_questions = pdfclass_questions;
+            KALDI_LOG << "Setting questions for hmm-position [hmm-position ranges from 0 to "<< (max_num_pdf_classes-1) <<"]";
+            qo.SetQuestionsOf(kPdfClass, pdfclass_opts);
+
+            std::vector<int32> phone2num_pdf_classes;
+            topo.GetPhoneToNumPdfClasses(&phone2num_pdf_classes);
+
+            EventMap *to_pdf = NULL;
+
+            //////// Build the tree. ////////////
+
+            to_pdf = BuildTree(qo,
+                              phone_sets,
+                              phone2num_pdf_classes,
+                              is_shared_root,
+                              is_split_root,
+                              stats,
+                              thresh,
+                              max_leaves,
+                              cluster_thresh,
+                              P,
+                              round_num_leaves);
+
+            { // This block is to warn about low counts.
+                  std::vector<BuildTreeStatsType> split_stats;
+                  SplitStatsByMap(stats, *to_pdf,
+                              &split_stats);
+                  for (size_t i = 0; i < split_stats.size(); i++)
+                  if (SumNormalizer(split_stats[i]) < 100.0)
+                  KALDI_VLOG(1) << "For pdf-id " << i << ", low count "
+                                    << SumNormalizer(split_stats[i]);
+            }
+
+            ContextDependency ctx_dep(N, P, to_pdf);  // takes ownership
+            // of pointer "to_pdf", so set it NULL.
+            to_pdf = NULL;
+
+            WriteKaldiObject(ctx_dep, tree_out_filename, binary);
+
+            {  // This block is just doing some checks.
+
+                  std::vector<int32> all_phones;
+                  for (size_t i = 0; i < phone_sets.size(); i++)
+                  all_phones.insert(all_phones.end(),
+                                    phone_sets[i].begin(), phone_sets[i].end());
+                  SortAndUniq(&all_phones);
+                  if (all_phones != topo.GetPhones()) {
+                  std::ostringstream ss;
+                  WriteIntegerVector(ss, false, all_phones);
+                  ss << " vs. ";
+                  WriteIntegerVector(ss, false, topo.GetPhones());
+                  KALDI_WARN << "Mismatch between phone sets provided in roots file, and those in topology: " << ss.str();
+                  }
+                  std::vector<int32> phones_vec;  // phones we saw.
+                  PossibleValues(P, stats, &phones_vec); // function in build-tree-utils.h
+
+                  std::vector<int32> unseen_phones;  // diagnostic.
+                  for (size_t i = 0; i < all_phones.size(); i++)
+                  if (!std::binary_search(phones_vec.begin(), phones_vec.end(), all_phones[i]))
+                  unseen_phones.push_back(all_phones[i]);
+                  for (size_t i = 0; i < phones_vec.size(); i++)
+                  if (!std::binary_search(all_phones.begin(), all_phones.end(), phones_vec[i]))
+                  KALDI_ERR << "Phone " << (phones_vec[i])
+                              << " appears in stats but is not listed in roots file.";
+                  if (!unseen_phones.empty()) {
+                  std::ostringstream ss;
+                  for (size_t i = 0; i < unseen_phones.size(); i++)
+                  ss << unseen_phones[i] << ' ';
+                  // Note, unseen phones is just a warning as in certain kinds of
+                  // systems, this can be OK (e.g. where phone encodes position and
+                  // stress information).
+                  KALDI_WARN << "Saw no stats for following phones: " << ss.str();
+                  }
+            }
+          },
+               py::arg("topo"),
+               py::arg("questions"),
+               py::arg("stats"),
+               py::arg("roots_filename"),
+               py::arg("tree_out_filename"),
+               py::arg("num_iters_refine") = 0,
+               py::arg("P") = 1,
+               py::arg("N") = 3,
+               py::arg("thresh") = 300.0,
+               py::arg("cluster_thresh") = -1.0,
+               py::arg("max_leaves") = 0,
+               py::arg("round_num_leaves") = true);
 }

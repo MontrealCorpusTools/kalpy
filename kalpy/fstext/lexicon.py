@@ -11,6 +11,11 @@ import typing
 import pynini
 import pywrapfst
 
+from _kalpy.fstext import VectorFst
+from _kalpy.lat import WordAlignLatticeLexiconInfo
+from kalpy.exceptions import PhonesToPronunciationsError
+from kalpy.gmm.data import CtmInterval, HierarchicalCtm, WordCtmInterval
+
 
 @dataclasses.dataclass
 class Pronunciation:
@@ -22,8 +27,8 @@ class Pronunciation:
     pronunciation: str
     probability: typing.Optional[float]
     silence_after_probability: typing.Optional[float]
-    silence_before_correct: typing.Optional[float]
-    non_silence_before_correct: typing.Optional[float]
+    silence_before_correction: typing.Optional[float]
+    non_silence_before_correction: typing.Optional[float]
     disambiguation: typing.Optional[int]
 
 
@@ -44,6 +49,7 @@ def parse_dictionary_file(
         :class:`~kalpy.fstext.lexicon.Pronunciation`
     """
     prob_pattern = re.compile(r"\b\d+\.\d+\b")
+    found_set = set()
     with open(path, encoding="utf8") as f:
         for i, line in enumerate(f):
             line = line.strip()
@@ -57,24 +63,27 @@ def parse_dictionary_file(
             word = line.pop(0)
             prob = None
             silence_after_prob = None
-            silence_before_correct = None
-            non_silence_before_correct = None
+            silence_before_correction = None
+            non_silence_before_correction = None
             if prob_pattern.match(line[0]):
                 prob = float(line.pop(0))
                 if prob_pattern.match(line[0]):
                     silence_after_prob = float(line.pop(0))
                     if prob_pattern.match(line[0]):
-                        silence_before_correct = float(line.pop(0))
+                        silence_before_correction = float(line.pop(0))
                         if prob_pattern.match(line[0]):
-                            non_silence_before_correct = float(line.pop(0))
+                            non_silence_before_correction = float(line.pop(0))
             pron = " ".join(line)
+            if (word, pron) in found_set:
+                continue
+            found_set.add((word, pron))
             yield Pronunciation(
                 word,
                 pron,
                 prob,
                 silence_after_prob,
-                silence_before_correct,
-                non_silence_before_correct,
+                silence_before_correction,
+                non_silence_before_correction,
                 None,
             )
 
@@ -85,9 +94,8 @@ class LexiconCompiler:
 
     Parameters
     ----------
-    silence_disambiguation_symbol: str
-        Disambiguation symbol for use in transcription decoding versus alignment decoding,
-        leave empty to generate a lexicon for training/alignment
+    disambiguation: bool
+        Flag for compiling a disambiguated lexicon for decoding instead of alignment
     silence_probability: float
         Probability of silence following words
     initial_silence_probability: float
@@ -124,9 +132,11 @@ class LexiconCompiler:
         List of pronunciations loaded from dictionary file
     """
 
+    use_g2p = False
+
     def __init__(
         self,
-        silence_disambiguation_symbol: typing.Optional[str] = None,
+        disambiguation: bool = False,
         silence_probability: float = 0.5,
         initial_silence_probability: float = 0.5,
         final_silence_correction: typing.Optional[float] = None,
@@ -137,8 +147,12 @@ class LexiconCompiler:
         oov_phone: str = "spn",
         position_dependent_phones: bool = False,
         ignore_case: bool = True,
+        phones: typing.Collection[str] = None,
+        word_begin_label: str = "#1",
+        word_end_label: str = "#2",
     ):
-        self.silence_disambiguation_symbol = silence_disambiguation_symbol
+        self.disambiguation = disambiguation
+        self.silence_disambiguation_symbol = "<eps>"
         self.silence_probability = silence_probability
         self.initial_silence_probability = initial_silence_probability
         self.final_silence_correction = final_silence_correction
@@ -150,11 +164,6 @@ class LexiconCompiler:
         self.max_disambiguation_symbol = 1
         self.position_dependent_phones = position_dependent_phones
         self.ignore_case = ignore_case
-        if self.silence_disambiguation_symbol is None:
-            self.silence_disambiguation_symbol = "<eps>"
-            self.disambiguation = False
-        else:
-            self.disambiguation = True
         self.word_table = pywrapfst.SymbolTable()
         self.word_table.add_symbol(silence_word)
         self.word_table.add_symbol(oov_word)
@@ -168,9 +177,22 @@ class LexiconCompiler:
         if self.position_dependent_phones:
             for pos in ["_S", "_B", "_E", "_I"]:
                 self.phone_table.add_symbol(oov_phone + pos)
+        if phones is not None:
+            for p in sorted(phones):
+                self.phone_table.add_symbol(p)
+                if self.position_dependent_phones:
+                    for pos in ["_S", "_B", "_E", "_I"]:
+                        self.phone_table.add_symbol(p + pos)
         self.pronunciations: typing.List[Pronunciation] = []
         self._fst = None
+        self._kaldi_fst = None
         self._align_fst = None
+        self._align_lexicon = None
+        self.word_begin_label = word_begin_label
+        self.word_end_label = word_end_label
+
+    def clear(self):
+        self.pronunciations = []
 
     def to_int(self, word: str) -> int:
         """
@@ -258,6 +280,15 @@ class LexiconCompiler:
             if self.phone_table.find(i).startswith("#")
         ]
 
+    @property
+    def silence_symbols(self) -> typing.List[int]:
+        """List of integer IDs for silence symbols in the phone symbol table"""
+        return [
+            i
+            for i in range(self.phone_table.num_symbols())
+            if self.phone_table.find(i) in {self.silence_phone, self.oov_phone}
+        ]
+
     def compute_disambiguation_symbols(self):
         """Calculate the necessary disambiguation symbols for the lexicon"""
         subsequences = set()
@@ -280,23 +311,57 @@ class LexiconCompiler:
         for x in range(self.max_disambiguation_symbol + 3):
             p = f"#{x}"
             self.phone_table.add_symbol(p)
+        if self.disambiguation:
+            self.silence_disambiguation_symbol = f"#{self.max_disambiguation_symbol + 1}"
         return self.pronunciations
+
+    @property
+    def align_lexicon(self):
+        if self._align_lexicon is None:
+            lex = []
+            word_symbol = self.to_int(self.silence_word)
+            lex.append([word_symbol, word_symbol, self.phone_table.find(self.silence_phone)])
+            for pron in self.pronunciations:
+                word_symbol = self.to_int(pron.orthography)
+                phones = pron.pronunciation.split()
+                if self.position_dependent_phones:
+                    if len(phones) == 1:
+                        phones[0] += "_S"
+                    else:
+                        phones[0] += "_B"
+                        for i in range(1, len(phones) - 1):
+                            phones[i] += "_I"
+                        phones[-1] += "_E"
+
+                lex.append([word_symbol, word_symbol, *(self.phone_table.find(x) for x in phones)])
+
+            self._align_lexicon = WordAlignLatticeLexiconInfo(lex)
+        return self._align_lexicon
 
     @property
     def fst(self) -> pynini.Fst:
         """Compiled lexicon FST"""
         if self._fst is not None:
             return self._fst
-        initial_silence_cost = -1 * math.log(self.initial_silence_probability)
-        initial_non_silence_cost = -1 * math.log(1.0 - self.initial_silence_probability)
-        if self.final_silence_correction is None or self.final_non_silence_correction is None:
-            final_silence_cost = 0
-            final_non_silence_cost = 0
-        else:
-            final_silence_cost = str(-math.log(self.final_silence_correction))
-            final_non_silence_cost = str(-math.log(self.final_non_silence_correction))
-        base_silence_following_cost = -math.log(self.silence_probability)
-        base_non_silence_following_cost = -math.log(1 - self.silence_probability)
+
+        initial_silence_cost = 0
+        initial_non_silence_cost = 0
+        if self.initial_silence_probability:
+            initial_silence_cost = -1 * math.log(self.initial_silence_probability)
+            initial_non_silence_cost = -1 * math.log(1.0 - self.initial_silence_probability)
+
+        final_silence_cost = 0
+        final_non_silence_cost = 0
+        if self.final_silence_correction:
+            final_silence_cost = -math.log(self.final_silence_correction)
+            final_non_silence_cost = -math.log(self.final_non_silence_correction)
+
+        base_silence_following_cost = 0
+        base_non_silence_following_cost = 0
+        if self.silence_probability:
+            base_silence_following_cost = -math.log(self.silence_probability)
+            base_non_silence_following_cost = -math.log(1 - self.silence_probability)
+
         self.phone_table.find(self.silence_disambiguation_symbol)
         self.word_table.find("<eps>")
         self.word_table.find(self.silence_word)
@@ -329,23 +394,23 @@ class LexiconCompiler:
             word_symbol = self.word_table.find(pron.orthography)
             phones = pron.pronunciation.split()
             silence_before_cost = (
-                -math.log(pron.silence_before_correct)
-                if pron.silence_before_correct is not None
+                -math.log(pron.silence_before_correction)
+                if pron.silence_before_correction
                 else 0.0
             )
             non_silence_before_cost = (
-                -math.log(pron.non_silence_before_correct)
-                if pron.non_silence_before_correct is not None
+                -math.log(pron.non_silence_before_correction)
+                if pron.non_silence_before_correction
                 else 0.0
             )
             silence_following_cost = (
                 -math.log(pron.silence_after_probability)
-                if pron.silence_after_probability is not None
+                if pron.silence_after_probability
                 else base_silence_following_cost
             )
             non_silence_following_cost = (
                 -math.log(1 - pron.silence_after_probability)
-                if pron.silence_after_probability is not None
+                if pron.silence_after_probability
                 else base_non_silence_following_cost
             )
             if self.position_dependent_phones:
@@ -432,11 +497,42 @@ class LexiconCompiler:
         else:
             fst.set_final(non_silence_state, pywrapfst.Weight.one(fst.weight_type()))
 
-        # fst.set_input_symbols(self.phone_table)
-        # fst.set_output_symbols(self.word_table)
         fst.arcsort("olabel")
         self._fst = fst
         return self._fst
+
+    @property
+    def kaldi_fst(self) -> VectorFst:
+        return VectorFst.from_pynini(self.fst)
+
+    def load_l_from_file(
+        self,
+        l_fst_path: typing.Union[pathlib.Path, str],
+    ) -> None:
+        """
+        Read g.fst from file
+
+        Parameters
+        ----------
+        l_fst_path: :class:`~pathlib.Path` or str
+            Path to read HCLG.fst
+        """
+        self._fst = pynini.Fst.read(str(l_fst_path))
+        self._kaldi_fst = VectorFst.Read(str(l_fst_path))
+
+    def load_l_align_from_file(
+        self,
+        l_fst_path: typing.Union[pathlib.Path, str],
+    ) -> None:
+        """
+        Read g.fst from file
+
+        Parameters
+        ----------
+        l_fst_path: :class:`~pathlib.Path` or str
+            Path to read HCLG.fst
+        """
+        self._align_fst = pynini.Fst.read(str(l_fst_path))
 
     @property
     def align_fst(self) -> pynini.Fst:
@@ -471,6 +567,15 @@ class LexiconCompiler:
                 sil_state,
             ),
         )
+        fst.add_arc(
+            sil_state,
+            pywrapfst.Arc(
+                self.phone_table.find(self.silence_phone),
+                self.word_table.find(self.silence_word),
+                pywrapfst.Weight.one(fst.weight_type()),
+                loop_state,
+            ),
+        )
 
         for pron in self.pronunciations:
             phones = pron.pronunciation.split()
@@ -483,7 +588,7 @@ class LexiconCompiler:
                         phones[-1] += "_E"
                         for i in range(1, len(phones) - 1):
                             phones[i] += "_I"
-            phones = ["#1"] + phones + ["#2"]
+            phones = [self.word_begin_label] + phones + [self.word_end_label]
             current_state = loop_state
             for i in range(len(phones) - 1):
                 p_s = self.phone_table.find(phones[i])
@@ -521,3 +626,243 @@ class LexiconCompiler:
         fst.arcsort("olabel")
         self._align_fst = fst
         return self._align_fst
+
+    def _create_pronunciation_string(
+        self,
+        word_symbols: typing.List[int],
+        phone_symbols: typing.List[int],
+        transcription: bool = False,
+    ):
+        word_begin_symbol = self.phone_table.find(self.word_begin_label)
+        word_end_symbol = self.phone_table.find(self.word_end_label)
+        text = " ".join(self.word_table.find(x) for x in word_symbols)
+        acceptor = pynini.accep(text, token_type=self.word_table)
+        phone_to_word = pynini.compose(self.align_fst, acceptor)
+        phone_fst = pynini.Fst()
+        current_state = phone_fst.add_state()
+        phone_fst.set_start(current_state)
+        for symbol in phone_symbols:
+            next_state = phone_fst.add_state()
+            phone_fst.add_arc(
+                current_state,
+                pywrapfst.Arc(
+                    symbol, symbol, pywrapfst.Weight.one(phone_fst.weight_type()), next_state
+                ),
+            )
+            current_state = next_state
+        if transcription:
+            if phone_symbols[-1] == self.phone_table.find(self.silence_phone):
+                state = current_state - 1
+            else:
+                state = current_state
+            phone_to_word_state = phone_to_word.num_states() - 1
+            for i in range(self.phone_table.num_symbols()):
+                if self.phone_table.find(i) == "<eps>":
+                    continue
+                if self.phone_table.find(i).startswith("#"):
+                    continue
+                phone_fst.add_arc(
+                    state,
+                    pywrapfst.Arc(
+                        self.phone_table.find("<eps>"),
+                        i,
+                        pywrapfst.Weight.one(phone_fst.weight_type()),
+                        state,
+                    ),
+                )
+
+                phone_to_word.add_arc(
+                    phone_to_word_state,
+                    pywrapfst.Arc(
+                        i,
+                        self.phone_table.find("<eps>"),
+                        pywrapfst.Weight.one(phone_fst.weight_type()),
+                        phone_to_word_state,
+                    ),
+                )
+        for s in range(current_state + 1):
+            phone_fst.add_arc(
+                s,
+                pywrapfst.Arc(
+                    word_end_symbol,
+                    word_end_symbol,
+                    pywrapfst.Weight.one(phone_fst.weight_type()),
+                    s,
+                ),
+            )
+            phone_fst.add_arc(
+                s,
+                pywrapfst.Arc(
+                    word_begin_symbol,
+                    word_begin_symbol,
+                    pywrapfst.Weight.one(phone_fst.weight_type()),
+                    s,
+                ),
+            )
+
+        phone_fst.set_final(current_state, pywrapfst.Weight.one(phone_fst.weight_type()))
+        phone_fst.arcsort("olabel")
+
+        lattice = pynini.compose(phone_fst, phone_to_word)
+
+        try:
+            path_string = pynini.shortestpath(lattice).project("input").string(self.phone_table)
+        except Exception:
+            phone_fst.set_input_symbols(self.phone_table)
+            phone_fst.set_output_symbols(self.phone_table)
+            phone_to_word.set_input_symbols(self.phone_table)
+            phone_to_word.set_output_symbols(self.word_table)
+            raise PhonesToPronunciationsError(
+                text,
+                " ".join(self.phone_table.find(x) for x in phone_symbols),
+                phone_fst,
+                phone_to_word,
+            )
+        if self.position_dependent_phones:
+            path_string = re.sub(r"_[SIBE]\b", "", path_string)
+
+        path_string = re.sub(f" {self.word_end_label}$", "", path_string)
+        path_string = path_string.replace(
+            f"{self.word_end_label} {self.word_end_label}", self.word_end_label
+        )
+        path_string = path_string.replace(
+            f"{self.word_end_label} {self.word_begin_label}", self.word_begin_label
+        )
+        path_string = path_string.replace(f"{self.word_end_label}", self.word_begin_label)
+        path_string = re.sub(f"^{self.word_begin_label} ", "", path_string)
+        word_splits = [x for x in re.split(rf" ?{self.word_begin_label} ?", path_string)]
+        return word_splits
+
+    def phones_to_pronunciations(
+        self,
+        text: str,
+        word_symbols: typing.List[int],
+        intervals: typing.List[CtmInterval],
+        transcription: bool = False,
+    ) -> HierarchicalCtm:
+
+        phones = [x.symbol for x in intervals]
+        word_splits = self._create_pronunciation_string(
+            word_symbols,
+            phones,
+            transcription=transcription,
+        )
+        actual_words = text.split()
+        word_intervals = []
+        current_phone_index = 0
+        current_word_index = 0
+        for i, w in enumerate(actual_words):
+            pron = word_splits[current_word_index]
+            word_symbol = word_symbols[i]
+            if pron == self.silence_phone:
+                word_intervals.append(
+                    WordCtmInterval(
+                        self.silence_word,
+                        self.word_table.find(self.silence_word),
+                        intervals[current_phone_index : current_phone_index + 1],
+                    )
+                )
+                current_word_index += 1
+                current_phone_index += 1
+                pron = word_splits[current_word_index]
+
+            phones = pron.split()
+            word_intervals.append(
+                WordCtmInterval(
+                    w,
+                    word_symbol,
+                    intervals[current_phone_index : current_phone_index + len(phones)],
+                )
+            )
+            current_phone_index += len(phones)
+            current_word_index += 1
+        if current_word_index != len(word_splits):
+            pron = word_splits[current_word_index]
+            if pron == self.silence_phone:
+                word_intervals.append(
+                    WordCtmInterval(
+                        self.silence_word,
+                        self.word_table.find(self.silence_word),
+                        intervals[current_phone_index : current_phone_index + 1],
+                    )
+                )
+        return HierarchicalCtm(word_intervals, text=text)
+
+
+class G2PCompiler(LexiconCompiler):
+    use_g2p = True
+
+    def __init__(
+        self,
+        fst: pynini.Fst,
+        grapheme_table: pywrapfst.SymbolTable,
+        phone_table: pywrapfst.SymbolTable,
+        silence_phone: str = "sil",
+        silence_word: str = "<eps>",
+        align_fst: typing.Optional[pynini.Fst] = None,
+        position_dependent_phones: bool = False,
+    ):
+        self._fst = fst
+        self._align_fst = align_fst
+        self._align_fst.invert()
+        self.word_table = grapheme_table
+        self.phone_table = phone_table
+        self.silence_phone = silence_phone
+        self.silence_word = silence_word
+        self.word_begin_label = "#1"
+        self.word_end_label = "#2"
+        self.position_dependent_phones = position_dependent_phones
+
+    def phones_to_pronunciations(
+        self,
+        text: str,
+        word_symbols: typing.List[int],
+        intervals: typing.List[CtmInterval],
+        transcription: bool = False,
+    ) -> HierarchicalCtm:
+        phone_symbols = [x.symbol for x in intervals]
+        word_symbols = [self.word_table.find(x) for x in text.split()]
+        word_splits = self._create_pronunciation_string(
+            word_symbols,
+            phone_symbols,
+            transcription=transcription,
+        )
+
+        # Might need some better logic
+        actual_words = [x.replace(" ", "") for x in text.split("<space>")]
+        word_intervals = []
+        current_phone_index = 0
+        current_word_index = 0
+        for w in actual_words:
+            pron = word_splits[current_word_index]
+            if pron == self.silence_phone:
+                word_intervals.append(
+                    WordCtmInterval(
+                        self.silence_word,
+                        0,
+                        intervals[current_phone_index : current_phone_index + 1],
+                    )
+                )
+                current_word_index += 1
+                current_phone_index += 1
+                pron = word_splits[current_word_index]
+
+            phones = pron.split()
+            word_intervals.append(
+                WordCtmInterval(
+                    w, 0, intervals[current_phone_index : current_phone_index + len(phones)]
+                )
+            )
+            current_phone_index += len(phones)
+            current_word_index += 1
+        if current_word_index != len(word_splits):
+            pron = word_splits[current_word_index]
+            if pron == self.silence_phone:
+                word_intervals.append(
+                    WordCtmInterval(
+                        self.silence_word,
+                        0,
+                        intervals[current_phone_index : current_phone_index + 1],
+                    )
+                )
+        return HierarchicalCtm(word_intervals, text=text)

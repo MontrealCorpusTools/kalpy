@@ -24,13 +24,26 @@
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
 #include <pybind11/pybind11.h>
+#include <pybind11/cast.h>
 #include <pybind11/stl.h>
+#include <pybind11/iostream.h>
+#include <mutex>
+#include <iostream>
 #include "fst/vector-fst.h"
+#include "fst/fst.h"
+#include "fst/fstlib.h"
+#include "fst/fst-decl.h"
+#include <fst/script/fst-class.h>
+#include <fst/extensions/far/far-class.h>
+#include "_pywrapfst.h"
 
+
+static std::mutex cout_mutex;
 
 namespace py = pybind11;
 
 template <typename... Args>
 using overload_cast_ = py::detail::overload_cast_impl<Args...>;
+
 
 #endif  // KALDI_PYBIND_KALDI_PYBIND_H_

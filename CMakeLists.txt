@@ -94,6 +94,7 @@ target_link_libraries(_kalpy PUBLIC kaldi-base kaldi-chain
                                     kaldi-tree
                                     kaldi-util
                                     fst
+                                    fstscript
                                     )
 
 if(CUDA_FOUND)

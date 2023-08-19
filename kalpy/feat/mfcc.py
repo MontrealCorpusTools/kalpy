@@ -1,32 +1,24 @@
+"""Classes for computing MFCC features"""
 from __future__ import annotations
 
-import dataclasses
+import logging
 import pathlib
 import typing
+from contextlib import redirect_stderr, redirect_stdout
 
 import librosa
 import numpy as np
 
 from _kalpy import feat
 from _kalpy.matrix import CompressedMatrix, FloatMatrixBase
-from _kalpy.util import (
-    BaseFloatMatrixWriter,
-    CompressedMatrixWriter,
-    RandomAccessBaseFloatMatrixReader,
-    SequentialBaseFloatMatrixReader,
-)
+from _kalpy.util import BaseFloatMatrixWriter, CompressedMatrixWriter
+from kalpy.data import Segment
+from kalpy.utils import generate_write_specifier
 
-
-@dataclasses.dataclass
-class Segment:
-    """
-    Data class for information about acoustic segments
-    """
-
-    file_path: str
-    begin: typing.Optional[float] = None
-    end: typing.Optional[float] = None
-    channel: typing.Optional[int] = 0
+logger = logging.getLogger("kalpy.mfcc")
+logger.setLevel(logging.DEBUG)
+logger.write = lambda msg: logger.info(msg) if msg != "\n" else None
+logger.flush = lambda: None
 
 
 class MfccComputer:
@@ -110,35 +102,72 @@ class MfccComputer:
         raw_energy: bool = True,
         cepstral_lifter: float = 22.0,
         htk_compatibility: bool = False,
+        allow_downsample: bool = True,
+        allow_upsample: bool = True,
     ):
-        self.frame_opts = feat.FrameExtractionOptions()
-        self.frame_opts.frame_length_ms = frame_length
-        self.frame_opts.frame_shift_ms = frame_shift
-        self.frame_opts.dither = dither
-        self.frame_opts.preemph_coeff = preemphasis_coefficient
-        self.frame_opts.samp_freq = sample_frequency
-        self.frame_opts.remove_dc_offset = remove_dc_offset
-        self.frame_opts.window_type = window_type
-        self.frame_opts.round_to_power_of_two = round_to_power_of_two
-        self.frame_opts.blackman_coeff = blackman_coeff
-        self.frame_opts.snip_edges = snip_edges
-        self.frame_opts.max_feature_vectors = max_feature_vectors
+        self.frame_length = frame_length
+        self._frame_shift = frame_shift
+        self.dither = dither
+        self.preemphasis_coefficient = preemphasis_coefficient
+        self.sample_frequency = sample_frequency
+        self.remove_dc_offset = remove_dc_offset
+        self.window_type = window_type
+        self.round_to_power_of_two = round_to_power_of_two
+        self.blackman_coeff = blackman_coeff
+        self.snip_edges = snip_edges
+        self.max_feature_vectors = max_feature_vectors
+        self.allow_downsample = allow_downsample
+        self.allow_upsample = allow_upsample
+        self.low_frequency = low_frequency
+        self.high_frequency = high_frequency
+        self.vtln_low = vtln_low
+        self.vtln_high = vtln_high
+        self.num_mel_bins = num_mel_bins
+        self.cepstral_lifter = cepstral_lifter
+        self.num_coefficients = num_coefficients
+        self.energy_floor = energy_floor
+        self.use_energy = use_energy
+        self.raw_energy = raw_energy
+        self.htk_compatibility = htk_compatibility
 
-        self.mel_opts = feat.MelBanksOptions(num_mel_bins)
-        self.mel_opts.low_freq = low_frequency
-        self.mel_opts.high_freq = high_frequency
-        self.mel_opts.vtln_low = vtln_low
-        self.mel_opts.vtln_high = vtln_high
-        self.mfcc_opts = feat.MfccOptions()
-        self.mfcc_opts.frame_opts = self.frame_opts
-        self.mfcc_opts.mel_opts = self.mel_opts
-        self.mfcc_opts.cepstral_lifter = cepstral_lifter
-        self.mfcc_opts.num_ceps = num_coefficients
-        self.mfcc_opts.use_energy = use_energy
-        self.mfcc_opts.energy_floor = energy_floor
-        self.mfcc_opts.raw_energy = raw_energy
-        self.mfcc_opts.htk_compat = htk_compatibility
-        self.mfcc_obj = feat.Mfcc(self.mfcc_opts)
+    @property
+    def frame_shift(self):
+        return round(self._frame_shift / 1000, 3)
+
+    @property
+    def mfcc_obj(self):
+
+        frame_opts = feat.FrameExtractionOptions()
+        frame_opts.frame_length_ms = self.frame_length
+        frame_opts.frame_shift_ms = self._frame_shift
+        frame_opts.dither = self.dither
+        frame_opts.preemph_coeff = self.preemphasis_coefficient
+        frame_opts.samp_freq = self.sample_frequency
+        frame_opts.remove_dc_offset = self.remove_dc_offset
+        frame_opts.window_type = self.window_type
+        frame_opts.round_to_power_of_two = self.round_to_power_of_two
+        frame_opts.blackman_coeff = self.blackman_coeff
+        frame_opts.snip_edges = self.snip_edges
+        frame_opts.max_feature_vectors = self.max_feature_vectors
+        frame_opts.allow_downsample = self.allow_downsample
+        frame_opts.allow_upsample = self.allow_upsample
+
+        mel_opts = feat.MelBanksOptions(self.num_mel_bins)
+        mel_opts.low_freq = self.low_frequency
+        mel_opts.high_freq = self.high_frequency
+        mel_opts.vtln_low = self.vtln_low
+        mel_opts.vtln_high = self.vtln_high
+
+        mfcc_opts = feat.MfccOptions()
+        mfcc_opts.frame_opts = frame_opts
+        mfcc_opts.mel_opts = mel_opts
+        mfcc_opts.cepstral_lifter = self.cepstral_lifter
+        mfcc_opts.num_ceps = self.num_coefficients
+        mfcc_opts.use_energy = self.use_energy
+        mfcc_opts.energy_floor = self.energy_floor
+        mfcc_opts.raw_energy = self.raw_energy
+        mfcc_opts.htk_compat = self.htk_compatibility
+        return feat.Mfcc(mfcc_opts)
 
     def compute_mfccs(
         self,
@@ -157,27 +186,10 @@ class MfccComputer:
         :class:`numpy.ndarray`
             Feature matrix for the segment
         """
-        duration = None
-        if segment.end is not None and segment.begin is not None:
-            duration = segment.end - segment.begin
-        wave, sr = librosa.load(
-            segment.file_path,
-            sr=16000,
-            offset=segment.begin,
-            duration=duration,
-            mono=False,
-        )
-        wave = np.round(wave * 32768)
-        if len(wave.shape) == 2:
-            channel = 0 if segment.channel is None else segment.channel
-            wave = wave[channel, :]
-        mfccs = self.mfcc_obj.compute(wave)
+        mfccs = self.compute_mfccs_for_export(segment, compress=False)
         return mfccs.numpy()
 
-    def _compute_mfccs_for_export(
-        self,
-        segment: Segment,
-    ) -> FloatMatrixBase:
+    def compute_mfccs_for_export(self, segment: Segment, compress: bool = True) -> FloatMatrixBase:
         """
         Generate MFCCs for exporting to a kaldi archive
 
@@ -205,13 +217,16 @@ class MfccComputer:
         if len(wave.shape) == 2:
             channel = 0 if segment.channel is None else segment.channel
             wave = wave[channel, :]
-        mfccs = self.mfcc_obj.compute(wave)
+        with redirect_stdout(logger), redirect_stderr(logger):
+            mfccs = self.mfcc_obj.compute(wave)
+            if compress:
+                mfccs = CompressedMatrix(mfccs)
         return mfccs
 
     def export_feats(
         self,
-        file_name: str,
-        segments: typing.Dict[str, Segment],
+        file_name: typing.Union[pathlib.Path, str],
+        segments: typing.Iterable[typing.Tuple[str, Segment]],
         write_scp: bool = False,
         compress: bool = True,
     ) -> None:
@@ -229,60 +244,13 @@ class MfccComputer:
         compress: bool
             Flag for whether to export features as a compressed archive
         """
-        file_name = str(file_name)
-        if not file_name.endswith(".ark"):
-            file_name += ".ark"
-        if write_scp:
-            write_specifier = f"ark,scp:{file_name},{file_name.replace('.ark', '.scp')}"
-        else:
-            write_specifier = f"ark:{file_name}"
+        write_specifier = generate_write_specifier(file_name, write_scp)
+        logger.debug(f"Writing to: {write_specifier}")
         if compress:
             writer = CompressedMatrixWriter(write_specifier)
         else:
             writer = BaseFloatMatrixWriter(write_specifier)
-        for key, segment in segments.items():
-            feats = self._compute_mfccs_for_export(segment)
-            if compress:
-                feats = CompressedMatrix(feats)
+        for key, segment in segments:
+            feats = self.compute_mfccs_for_export(segment, compress)
             writer.Write(str(key), feats)
         writer.Close()
-
-
-class FeatureArchive:
-    """
-    Class for reading an archive or SCP of features
-
-    Parameters
-    ----------
-    file_name: :class:`~pathlib.Path` or str
-        Path to archive or SCP file to read from
-    """
-
-    def __init__(self, file_name: typing.Union[pathlib.Path, str]):
-        self.file_name = str(file_name)
-        self.read_identifier = "ark"
-        if self.file_name.endswith(".scp"):
-            self.read_identifier = "scp"
-
-    def __iter__(self) -> typing.Generator[typing.Tuple[str, np.ndarray]]:
-        """Iterate over the utterance features in the archive"""
-        reader = SequentialBaseFloatMatrixReader(f"{self.read_identifier}:{self.file_name}")
-        try:
-            while not reader.Done():
-                utt = reader.Key()
-                feats = reader.Value().numpy()
-                yield utt, feats
-                reader.Next()
-        finally:
-            reader.Close()
-
-    def __getitem__(self, item: str) -> np.ndarray:
-        """Get features for a particular key from the archive file"""
-        item = str(item)
-        reader = RandomAccessBaseFloatMatrixReader(f"{self.read_identifier}:{self.file_name}")
-        try:
-            if not reader.HasKey(item):
-                raise Exception(f"No key {item} found in {self.file_name}")
-            return reader.Value(item).numpy()
-        finally:
-            reader.Close()

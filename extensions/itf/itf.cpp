@@ -47,7 +47,7 @@ void pybind_context_dep_itf(py::module& m) {
              "begin of sequence].  We do not insist that Compute must always "
              "output (into stateseq) a nonempty sequence of states, but we "
              "anticipate that stateseq will always be nonempty at output "
-             "intypical use cases.  'Compute' returns false if expansion "
+             "in typical use cases.  'Compute' returns false if expansion "
              "somehow failed.  Normally the calling code should raise an "
              "exception if this happens.  We can define a different interface "
              "later in order to handle other kinds of information-- the "
@@ -207,7 +207,8 @@ void pybind_clusterable_itf(py::module& m) {
       .def("SetZero", &PyClass::SetZero,
            "Set stats to empty.")
       .def("Add", &PyClass::Add,
-           "Add other stats.", py::arg("other"))
+           "Add other stats.", py::arg("other"),
+      py::call_guard<py::gil_scoped_release>())
       .def("Sub", &PyClass::Sub,
            "Subtract other stats", py::arg("other"))
       .def("Scale", &PyClass::Scale,

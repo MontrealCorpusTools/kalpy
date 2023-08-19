@@ -13,6 +13,10 @@
 #include "transform/regtree-fmllr-diag-gmm.h"
 #include "transform/regtree-mllr-diag-gmm.h"
 #include "transform/transform-common.h"
+#include "lat/kaldi-lattice.h"
+#include "lat/lattice-functions.h"
+#include <pybind11/stl.h>
+
 
 using namespace kaldi;
 
@@ -38,8 +42,10 @@ void pybind_basis_fmllr_diag_gmm(py::module &m) {
 
      basis_fmllr_accus.def(py::init<>())
         .def("ResizeAccus", &PyClass::ResizeAccus, py::arg("dim"))
-        .def("Write", &PyClass::Write, py::arg("os"), py::arg("binary"))
-        .def("Read", &PyClass::Read, py::arg("is"), py::arg("binary"), py::arg("add") = false)
+        .def("Write", &PyClass::Write, py::arg("os"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
+        .def("Read", &PyClass::Read, py::arg("is"), py::arg("binary"), py::arg("add") = false,
+      py::call_guard<py::gil_scoped_release>())
         .def("AccuGradientScatter",
           &PyClass::AccuGradientScatter,
           "Accumulate gradient scatter for one (training) speaker. "
@@ -57,8 +63,10 @@ void pybind_basis_fmllr_diag_gmm(py::module &m) {
         m, "BasisFmllrEstimate");
 
      basis_fmllr_estimate.def(py::init<>())
-        .def("Write", &PyClass::Write, py::arg("os"), py::arg("binary"))
-        .def("Read", &PyClass::Read, py::arg("is"), py::arg("binary"))
+        .def("Write", &PyClass::Write, py::arg("os"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
+        .def("Read", &PyClass::Read, py::arg("is"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
         .def("EstimateFmllrBasis",
           &PyClass::EstimateFmllrBasis,
           "Estimate the base matrices efficiently in a Maximum Likelihood manner. "
@@ -107,7 +115,100 @@ void pybind_cmvn(py::module &m) {
           "1st \"dim\" elements of 1st row are mean stats, 1st \"dim\" elements "
           "of 2nd row are var stats, last element of 1st row is count, "
           "last element of 2nd row is zero.",
-        py::arg("dim"), py::arg("stats"));
+        py::arg("dim"), py::arg("stats"),
+        py::call_guard<py::gil_scoped_release>());
+
+  m.def("AccCmvnStats",
+        py::overload_cast<const VectorBase<BaseFloat> &,
+                  BaseFloat ,
+                  MatrixBase<double> *>(&AccCmvnStats),
+        "Accumulation from a single frame (weighted).",
+        py::arg("feat"), py::arg("weight"), py::arg("stats"));
+  m.def("AccCmvnStats",
+        py::overload_cast<const MatrixBase<BaseFloat> &,
+                  const VectorBase<BaseFloat> *,
+                  MatrixBase<double> *>(&AccCmvnStats),
+        "Accumulation from a feature file (possibly weighted-- useful in excluding silence).",
+        py::arg("feats"), py::arg("weights"), py::arg("stats"),
+        py::call_guard<py::gil_scoped_release>());
+     m.def("calculate_cmvn",
+     [](const std::vector<std::string> &uttlist,
+          RandomAccessBaseFloatMatrixReader &feat_reader){
+
+          int32 num_done = 0, num_err = 0;
+          bool is_init = false;
+          Matrix<double> stats;
+          for (size_t i = 0; i < uttlist.size(); i++) {
+            std::string utt = uttlist[i];
+            if (!feat_reader.HasKey(utt)) {
+              KALDI_WARN << "Did not find features for utterance " << utt;
+              num_err++;
+              continue;
+            }
+            const Matrix<BaseFloat> &feats = feat_reader.Value(utt);
+            if (!is_init) {
+              InitCmvnStats(feats.NumCols(), &stats);
+              is_init = true;
+            }
+               AccCmvnStats(feats, NULL, &stats);
+               num_done++;
+
+          }
+          return py::make_tuple(stats, num_done, num_err);
+     },
+     "Calculate CMVN from a speaker's utterances",
+     py::arg("uttlist"),
+     py::arg("feat_reader"));
+
+  m.def("ApplyCmvn",
+        &ApplyCmvn,
+        "Apply cepstral mean and variance normalization to a matrix of features. "
+          "If norm_vars == true, expects stats to be of dimension 2 by (dim+1), but "
+          "if norm_vars == false, will accept stats of dimension 1 by (dim+1); these "
+          "are produced by the balanced-cmvn code when it computes an offset and "
+          "represents it as \"fake stats\".",
+        py::arg("stats"), py::arg("norm_vars"), py::arg("feats"),
+        py::call_guard<py::gil_scoped_release>());
+
+  m.def("apply_transform",
+        [](
+               const Matrix<BaseFloat> &feat,
+               const Matrix<BaseFloat> &trans
+          ){
+          py::gil_scoped_release release;
+          int32 transform_rows = trans.NumRows(),
+               transform_cols = trans.NumCols(),
+               feat_dim = feat.NumCols();
+      Matrix<BaseFloat> feat_out(feat.NumRows(), transform_rows);
+
+          if (transform_cols == feat_dim) {
+        feat_out.AddMatMat(1.0, feat, kNoTrans, trans, kTrans, 0.0);
+      } else if (transform_cols == feat_dim + 1) {
+        // append the implicit 1.0 to the input features.
+        SubMatrix<BaseFloat> linear_part(trans, 0, transform_rows, 0, feat_dim);
+        feat_out.AddMatMat(1.0, feat, kNoTrans, linear_part, kTrans, 0.0);
+        Vector<BaseFloat> offset(transform_rows);
+        offset.CopyColFromMat(trans, feat_dim);
+        feat_out.AddVecToRows(1.0, offset);
+      }
+      return feat_out;
+        },
+        py::arg("feat"), py::arg("trans"));
+  m.def("ApplyCmvnReverse",
+        &ApplyCmvnReverse,
+        "This is as ApplyCmvn, but does so in the reverse sense, i.e. applies a transform "
+          "that would take zero-mean, unit-variance input and turn it into output with the "
+          "stats of \"stats\".  This can be useful if you trained without CMVN but later want "
+          "to correct a mismatch, so you would first apply CMVN and then do the \"reverse\" "
+          "CMVN with the summed stats of your training data.",
+        py::arg("stats"), py::arg("norm_vars"), py::arg("feats"),
+        py::call_guard<py::gil_scoped_release>());
+  m.def("FakeStatsForSomeDims",
+        &FakeStatsForSomeDims,
+        "Modify the stats so that for some dimensions (specified in \"dims\"), we "
+          "replace them with \"fake\" stats that have zero mean and unit variance; this "
+          "is done to disable CMVN for those dimensions.",
+        py::arg("dims"), py::arg("stats"));
 }
 
 void pybind_compressed_transform_stats(py::module &m) {
@@ -125,9 +226,11 @@ void pybind_compressed_transform_stats(py::module &m) {
           .def("CopyToAffineXformStats", &PyClass::CopyToAffineXformStats,
                py::arg("input"))
           .def("Read", &PyClass::Read,
-               py::arg("in_stream"), py::arg("binary"))
+               py::arg("in_stream"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
           .def("Write", &PyClass::Write,
-               py::arg("out_stream"), py::arg("binary"));
+               py::arg("out_stream"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>());
     }
 }
 
@@ -216,11 +319,13 @@ void pybind_fmllr_diag_gmm(py::module &m) {
           .def("Read", &PyClass::Read,
                py::arg("in"),
                py::arg("binary"),
-               py::arg("add"))
+               py::arg("add"),
+      py::call_guard<py::gil_scoped_release>())
           .def("AccumulateForGmm", &PyClass::AccumulateForGmm,
                py::arg("gmm"),
                py::arg("data"),
-               py::arg("weight"))
+               py::arg("weight"),
+      py::call_guard<py::gil_scoped_release>())
           .def("AccumulateForGmmPreselect", &PyClass::AccumulateForGmmPreselect,
                py::arg("gmm"),
                py::arg("gselect"),
@@ -229,17 +334,251 @@ void pybind_fmllr_diag_gmm(py::module &m) {
           .def("AccumulateFromPosteriors", &PyClass::AccumulateFromPosteriors,
                py::arg("gmm"),
                py::arg("data"),
-               py::arg("posteriors"))
+               py::arg("posteriors"),
+      py::call_guard<py::gil_scoped_release>())
+          .def("accumulate_from_pdf_post",
+               [](PyClass& spk_stats,
+               const Posterior &pdf_post,
+                         const AmDiagGmm &am_gmm,
+                         const Matrix<BaseFloat> &feats
+               ){
+          py::gil_scoped_release gil_release;
+                    for (size_t i = 0; i < pdf_post.size(); i++) {
+                    for (size_t j = 0; j < pdf_post[i].size(); j++) {
+                         int32 pdf_id = pdf_post[i][j].first;
+                         spk_stats.AccumulateForGmm(am_gmm.GetPdf(pdf_id),
+                                                  feats.Row(i),
+                                                  pdf_post[i][j].second);
+                    }
+                    }
+
+          },
+               py::arg("pdf_post"),
+               py::arg("am_gmm"),
+               py::arg("feats"))
+          .def("accumulate_from_gpost",
+               [](PyClass& spk_stats,
+                         const GaussPost &gpost,
+                         const AmDiagGmm &am_gmm,
+                         const Matrix<BaseFloat> &feats
+               ){
+          py::gil_scoped_release gil_release;
+               Vector<BaseFloat> posterior;
+               for (size_t i = 0; i < gpost.size(); i++) {
+                    for (size_t j = 0; j < gpost[i].size(); j++) {
+                         int32 pdf_id = gpost[i][j].first;
+                         posterior = Vector<BaseFloat>(gpost[i][j].second);
+
+                         spk_stats.AccumulateFromPosteriors(am_gmm.GetPdf(pdf_id),
+                                                            feats.Row(i), posterior);
+
+
+                    }
+                    }
+          },
+               py::arg("gpost"),
+               py::arg("am_gmm"),
+               py::arg("feats"))
+          .def("accumulate_from_alignment",
+               [](PyClass& spk_stats,
+                         const TransitionModel &trans_model,
+                         const AmDiagGmm &am_gmm,
+                         const Matrix<BaseFloat> &feats,
+                         const std::vector<int32> &ali,
+                       const ConstIntegerSet<int32> &silence_set,
+                       BaseFloat silence_scale,
+                         BaseFloat rand_prune = 0.0,
+                       bool distributed = false,
+                       bool two_models = false
+               ){
+                    py::gil_scoped_release gil_release;
+                    Posterior pdf_post;
+                    Posterior post;
+
+                    AlignmentToPosterior(ali, &post);
+                    if (distributed)
+                    WeightSilencePostDistributed(trans_model, silence_set,
+                                                  silence_scale, &post);
+                    else
+                         WeightSilencePost(trans_model, silence_set,
+                                   silence_scale, &post);
+                         ConvertPosteriorToPdfs(trans_model, post, &pdf_post);
+
+                    if (!two_models){
+                         for (size_t i = 0; i < pdf_post.size(); i++) {
+                         for (size_t j = 0; j < pdf_post[i].size(); j++) {
+                              int32 pdf_id = pdf_post[i][j].first;
+                              spk_stats.AccumulateForGmm(am_gmm.GetPdf(pdf_id),
+                                                       feats.Row(i),
+                                                       pdf_post[i][j].second);
+                         }
+                         }
+                    }
+                    else{
+
+
+                         GaussPost gpost(pdf_post.size());
+                         BaseFloat tot_like_this_file = 0.0, tot_weight = 0.0;
+                         for (size_t i = 0; i < pdf_post.size(); i++) {
+                              gpost[i].reserve(pdf_post[i].size());
+                              for (size_t j = 0; j < pdf_post[i].size(); j++) {
+                              int32 pdf_id = pdf_post[i][j].first;
+                              BaseFloat weight = pdf_post[i][j].second;
+                              const DiagGmm &gmm = am_gmm.GetPdf(pdf_id);
+                              Vector<BaseFloat> this_post_vec;
+                              BaseFloat like =
+                                   gmm.ComponentPosteriors(feats.Row(i), &this_post_vec);
+                              this_post_vec.Scale(weight);
+                              if (rand_prune > 0.0)
+                              for (int32 k = 0; k < this_post_vec.Dim(); k++)
+                                   this_post_vec(k) = RandPrune(this_post_vec(k),
+                                                                 rand_prune);
+                              if (!this_post_vec.IsZero())
+                              gpost[i].push_back(std::make_pair(pdf_id, this_post_vec));
+                              tot_like_this_file += like * weight;
+                              tot_weight += weight;
+                              }
+                         }
+                         for (size_t i = 0; i < gpost.size(); i++) {
+                              for (size_t j = 0; j < gpost[i].size(); j++) {
+                                   int32 pdf_id = gpost[i][j].first;
+                                   const Vector<BaseFloat> & posterior(gpost[i][j].second);
+
+                                   spk_stats.AccumulateFromPosteriors(am_gmm.GetPdf(pdf_id),
+                                                                      feats.Row(i), posterior);
+
+                              }
+                              }
+                    }
+          },
+               py::arg("trans_model"),
+               py::arg("am_gmm"),
+               py::arg("feats"),
+               py::arg("ali"),
+               py::arg("silence_set"),
+               py::arg("silence_scale"),
+               py::arg("rand_prune") = 0.0,
+               py::arg("distributed") = false,
+               py::arg("two_models") = false)
+          .def("accumulate_from_lattice",
+               [](PyClass* spk_stats,
+                         const TransitionModel &trans_model,
+                         const AmDiagGmm &am_gmm,
+                         const Matrix<BaseFloat> &feats,
+                         Lattice &lat,
+                       const ConstIntegerSet<int32> &silence_set,
+                       BaseFloat silence_scale,
+                       BaseFloat lm_scale = 1.0,
+                       BaseFloat acoustic_scale = 1.0,
+                         BaseFloat rand_prune = 0.0,
+                       bool distributed = false,
+                       bool two_models = false
+               ){
+          py::gil_scoped_release gil_release;
+                    if (acoustic_scale != 1.0 || lm_scale != 1.0)
+                         fst::ScaleLattice(fst::LatticeScale(lm_scale, acoustic_scale), &lat);
+
+                    kaldi::uint64 props = lat.Properties(fst::kFstProperties, false);
+                    if (!(props & fst::kTopSorted)) {
+                         if (fst::TopSort(&lat) == false)
+                         {
+
+                              py::gil_scoped_acquire acquire;
+                              KALDI_ERR << "Cycles detected in lattice.";
+                              return;
+                         }
+                         }
+                    Posterior post;
+                    double lat_like = LatticeForwardBackward(lat, &post);
+                    if (distributed)
+                    WeightSilencePostDistributed(trans_model, silence_set,
+                                                  silence_scale, &post);
+                    else
+                    WeightSilencePost(trans_model, silence_set,
+                              silence_scale, &post);
+                    Posterior pdf_post;
+                    ConvertPosteriorToPdfs(trans_model, post, &pdf_post);
+                    if (!two_models){
+                         for (size_t i = 0; i < post.size(); i++) {
+                         for (size_t j = 0; j < pdf_post[i].size(); j++) {
+                              int32 pdf_id = pdf_post[i][j].first;
+                              spk_stats->AccumulateForGmm(am_gmm.GetPdf(pdf_id),
+                                                       feats.Row(i),
+                                                       pdf_post[i][j].second);
+                         }
+                         }
+                    }
+                    else{
+
+
+                         GaussPost gpost(post.size());
+                         BaseFloat tot_like_this_file = 0.0, tot_weight = 0.0;
+                         for (size_t i = 0; i < post.size(); i++) {
+                              gpost[i].reserve(pdf_post[i].size());
+                              for (size_t j = 0; j < pdf_post[i].size(); j++) {
+                              int32 pdf_id = pdf_post[i][j].first;
+                              BaseFloat weight = pdf_post[i][j].second;
+                              const DiagGmm &gmm = am_gmm.GetPdf(pdf_id);
+                              Vector<BaseFloat> this_post_vec;
+                              BaseFloat like =
+                                   gmm.ComponentPosteriors(feats.Row(i), &this_post_vec);
+                              this_post_vec.Scale(weight);
+                              if (rand_prune > 0.0)
+                              for (int32 k = 0; k < this_post_vec.Dim(); k++)
+                                   this_post_vec(k) = RandPrune(this_post_vec(k),
+                                                                 rand_prune);
+                              if (!this_post_vec.IsZero())
+                              gpost[i].push_back(std::make_pair(pdf_id, this_post_vec));
+                              tot_like_this_file += like * weight;
+                              tot_weight += weight;
+                              }
+                         }
+                         for (size_t i = 0; i < gpost.size(); i++) {
+                              for (size_t j = 0; j < gpost[i].size(); j++) {
+                                   int32 pdf_id = gpost[i][j].first;
+                                   const Vector<BaseFloat> & posterior(gpost[i][j].second);
+                                   spk_stats->AccumulateFromPosteriors(am_gmm.GetPdf(pdf_id),
+                                                                      feats.Row(i), posterior);
+                              }
+                              }
+                    }
+          },
+               py::arg("trans_model"),
+               py::arg("am_gmm"),
+               py::arg("feats"),
+               py::arg("lat"),
+               py::arg("silence_set"),
+               py::arg("silence_scale"),
+               py::arg("lm_scale") = 1.0,
+               py::arg("acoustic_scale") = 1.0,
+               py::arg("rand_prune") = 0.0,
+               py::arg("distributed") = false,
+               py::arg("two_models") = false)
           .def("AccumulateFromPosteriorsPreselect", &PyClass::AccumulateFromPosteriorsPreselect,
                py::arg("gmm"),
                py::arg("gselect"),
                py::arg("data"),
                py::arg("posteriors"))
-          .def("Update", &PyClass::Update,
+          .def("Update",
+               &PyClass::Update,
                py::arg("opts"),
                py::arg("fmllr_mat"),
                py::arg("objf_impr"),
-               py::arg("count"));
+               py::arg("count"))
+          .def("compute_transform",
+               [](PyClass& f, const AmDiagGmm &am_gmm,
+               const FmllrOptions &fmllr_opts){
+                    py::gil_scoped_release gil_release;
+                    BaseFloat impr, tot_t;
+                    Matrix<BaseFloat> transform(am_gmm.Dim(), am_gmm.Dim()+1);
+                    {
+                    transform.SetUnit();
+                    f.Update(fmllr_opts, &transform, &impr, &tot_t);
+                    return transform;
+                    }
+               },
+               py::arg("am_gmm"),
+               py::arg("fmllr_opts"));
     }
   m.def("InitFmllr",
         &InitFmllr,
@@ -399,10 +738,12 @@ void pybind_fmpe(py::module &m) {
       .def_readwrite("post_scale", &FmpeOptions::post_scale)
           .def("Write", &FmpeOptions::Write,
                py::arg("os"),
-               py::arg("binary"))
+               py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
           .def("Read", &FmpeOptions::Read,
                py::arg("is"),
-               py::arg("binary"));
+               py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>());
 
   py::class_<FmpeUpdateOptions>(m, "FmpeUpdateOptions")
       .def(py::init<>())
@@ -416,11 +757,13 @@ void pybind_fmpe(py::module &m) {
       .def("Init", &FmpeStats::Init)
      .def("Write", &FmpeStats::Write,
           py::arg("os"),
-          py::arg("binary"))
+          py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
      .def("Read", &FmpeStats::Read,
           py::arg("is"),
           py::arg("binary"),
-          py::arg("add") = false)
+          py::arg("add") = false,
+      py::call_guard<py::gil_scoped_release>())
       .def("DerivPlus", &FmpeStats::DerivPlus)
       .def("DerivMinus", &FmpeStats::DerivMinus)
       .def("AccumulateChecks", &FmpeStats::AccumulateChecks,
@@ -466,10 +809,12 @@ void pybind_fmpe(py::module &m) {
                py::arg("stats"))
           .def("Write", &PyClass::Write,
                py::arg("os"),
-               py::arg("binary"))
+               py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
           .def("Read", &PyClass::Read,
                py::arg("is"),
-               py::arg("binary"))
+               py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
           .def("Update", &PyClass::Update,
                "Returns total objf improvement, based on linear assumption.",
                py::arg("config"),
@@ -535,11 +880,95 @@ void pybind_lda_estimate(py::module &m) {
                "The \"remove_offset\" argument is new and should be set to false for back "
                "compatibility.",
                py::arg("opts"), py::arg("M"), py::arg("Mfull") = NULL)
+          .def("estimate",
+          [](PyClass &lda, const LdaEstimateOptions &opts){
+
+               Matrix<BaseFloat> lda_mat;
+               Matrix<BaseFloat> full_lda_mat;
+               lda.Estimate(opts, &lda_mat, &full_lda_mat);
+               return py::make_tuple(lda_mat, full_lda_mat);
+          }, py::arg("opts"))
           .def("Read", &PyClass::Read,
-               py::arg("in_stream"), py::arg("binary"), py::arg("add"))
+               py::arg("in_stream"), py::arg("binary"), py::arg("add"),
+      py::call_guard<py::gil_scoped_release>())
           .def("Write", &PyClass::Write,
-               py::arg("out_stream"), py::arg("binary"));
-    }
+               py::arg("out_stream"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
+          .def("Add",
+               [](
+                  PyClass &lda,
+                  const PyClass &other
+               ){
+               py::gil_scoped_release gil_release;
+
+               std::ostringstream os;
+               bool binary = true;
+               other.Write(os, binary);
+               std::istringstream str(os.str());
+               lda.Read(str, true, true);
+               },
+               py::arg("other")
+               )
+          .def("acc_lda",
+                    [](PyClass &lda,
+                    const TransitionModel &trans_model,
+                                   const std::vector<int32> &ali,
+                                   const Matrix<BaseFloat> &feats,
+                                   const ConstIntegerSet<int32> &silence_set,
+                                   BaseFloat rand_prune = 0.0,
+                                   BaseFloat silence_weight = 0.0){
+          py::gil_scoped_release gil_release;
+
+               Posterior post;
+               AlignmentToPosterior(ali, &post);
+               WeightSilencePost(trans_model, silence_set,
+                                   silence_weight, &post);
+               Posterior pdf_post;
+               ConvertPosteriorToPdfs(trans_model, post, &pdf_post);
+               for (int32 i = 0; i < feats.NumRows(); i++) {
+               SubVector<BaseFloat> feat(feats, i);
+               for (size_t j = 0; j < pdf_post[i].size(); j++) {
+                    int32 pdf_id = pdf_post[i][j].first;
+                    BaseFloat weight = RandPrune(pdf_post[i][j].second, rand_prune);
+                    if (weight != 0.0) {
+                    lda.Accumulate(feat, pdf_id, weight);
+                    }
+               }
+               }
+                    },
+               py::arg("trans_model"),
+               py::arg("ali"),
+               py::arg("feats"),
+               py::arg("silence_set"),
+               py::arg("rand_prune") = 0.0,
+               py::arg("silence_weight") = 0.0
+               )
+          .def(py::pickle(
+          [](const PyClass &p) { // __getstate__
+               /* Return a tuple that fully encodes the state of the object */
+               std::ostringstream os;
+               bool binary = true;
+               p.Write(os, binary);
+               return py::make_tuple(
+                         py::bytes(os.str()));
+          },
+          [](py::tuple t) { // __setstate__
+               if (t.size() != 1)
+                    throw std::runtime_error("Invalid state!");
+
+            /* Create a new C++ instance */
+            PyClass *p = new PyClass();
+
+            /* Assign any additional state */
+            std::istringstream str(t[0].cast<std::string>());
+               p->Read(str, true, false);
+
+            return p;
+          }
+     ));
+     }
+
+
 }
 
 void pybind_lvtln(py::module &m) {
@@ -579,9 +1008,11 @@ void pybind_lvtln(py::module &m) {
                py::arg("objf_impr") = NULL,
                py::arg("count") = NULL)
           .def("Read", &PyClass::Read,
-               py::arg("in_stream"), py::arg("binary"))
+               py::arg("in_stream"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
           .def("Write", &PyClass::Write,
-               py::arg("out_stream"), py::arg("binary"))
+               py::arg("out_stream"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
           .def("NumClasses", &PyClass::NumClasses)
           .def("Dim", &PyClass::Dim);
     }
@@ -603,9 +1034,11 @@ void pybind_mllt(py::module &m) {
                py::arg("dim"),
                py::arg("rand_prune") = 0.25)
           .def("Read", &PyClass::Read,
-               py::arg("in_stream"), py::arg("binary"), py::arg("add") = false)
+               py::arg("in_stream"), py::arg("binary"), py::arg("add") = false,
+      py::call_guard<py::gil_scoped_release>())
           .def("Write", &PyClass::Write,
-               py::arg("out_stream"), py::arg("binary"))
+               py::arg("out_stream"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
           .def("Dim", &PyClass::Dim)
           .def("Update", static_cast< void (PyClass::*)(MatrixBase<BaseFloat> *,
               BaseFloat *,
@@ -620,6 +1053,38 @@ void pybind_mllt(py::module &m) {
                py::arg("M"),
                py::arg("objf_impr_out"),
                py::arg("count_out"))
+          .def("update",
+               [](
+                  PyClass &mllt_accs){
+
+               Matrix<BaseFloat> mat(mllt_accs.Dim(), mllt_accs.Dim());
+               mat.SetUnit();
+               BaseFloat objf_impr, count;
+               mllt_accs.Update(&mat, &objf_impr, &count);
+               return py::make_tuple(mat, objf_impr, count);
+               },
+               "The Update function does the ML update; it requires that M has the "
+               "right size. "
+               " @param [in, out] M  The output transform, will be of dimension Dim() x Dim(). "
+               "                  At input, should be the unit transform (the objective function "
+               "                  improvement is measured relative to this value). "
+               " @param [out] objf_impr_out  The objective function improvement "
+               " @param [out] count_out  The data-count")
+          .def("Add",
+               [](
+                  PyClass &accs,
+                  const PyClass &other
+               ){
+          py::gil_scoped_release gil_release;
+
+               std::ostringstream os;
+               bool binary = true;
+               other.Write(os, binary);
+               std::istringstream str(os.str());
+               accs.Read(str, true, true);
+               },
+               py::arg("other")
+               )
           .def_static("Update_", py::overload_cast<double ,
                      const std::vector<SpMatrix<double> > &,
                      MatrixBase<BaseFloat> *,
@@ -644,7 +1109,67 @@ void pybind_mllt(py::module &m) {
           .def("AccumulateFromPosteriors", &PyClass::AccumulateFromPosteriors,
                py::arg("gmm"),
                py::arg("data"),
-               py::arg("posteriors"));
+               py::arg("posteriors"))
+          .def("gmm_acc_mllt",
+               [](PyClass &mllt_accs,
+                  const AmDiagGmm &am_gmm,
+                    const TransitionModel &trans_model,
+                                   const std::vector<int32> &ali,
+                                  const Matrix<BaseFloat> &mat,
+                                   const ConstIntegerSet<int32> &silence_set,
+                                   BaseFloat silence_weight = 0.0){
+
+                    py::gil_scoped_release release;
+                    Posterior post;
+                    AlignmentToPosterior(ali, &post);
+                    WeightSilencePost(trans_model, silence_set,
+                                        silence_weight, &post);
+                    Posterior pdf_posterior;
+                    ConvertPosteriorToPdfs(trans_model, post, &pdf_posterior);
+                    BaseFloat tot_like_this_file = 0.0, tot_weight = 0.0;
+                    for (size_t i = 0; i < pdf_posterior.size(); i++) {
+                         for (size_t j = 0; j < pdf_posterior[i].size(); j++) {
+                         int32 pdf_id = pdf_posterior[i][j].first;
+                         BaseFloat weight = pdf_posterior[i][j].second;
+
+                         tot_like_this_file += mllt_accs.AccumulateFromGmm(am_gmm.GetPdf(pdf_id),
+                                                                           mat.Row(i),
+                                                                           weight) * weight;
+                         tot_weight += weight;
+                         }
+                    }
+                    py::gil_scoped_acquire acquire;
+                    return py::make_tuple(tot_like_this_file, tot_weight);
+               },
+               py::arg("gmm"),
+               py::arg("trans_model"),
+               py::arg("ali"),
+               py::arg("mat"),
+               py::arg("silence_set"),
+               py::arg("silence_weight") = 0.0)
+          .def(py::pickle(
+          [](const PyClass &p) { // __getstate__
+               /* Return a tuple that fully encodes the state of the object */
+               std::ostringstream os;
+               bool binary = true;
+               p.Write(os, binary);
+               return py::make_tuple(
+                         py::bytes(os.str()));
+          },
+          [](py::tuple t) { // __setstate__
+               if (t.size() != 1)
+                    throw std::runtime_error("Invalid state!");
+
+            /* Create a new C++ instance */
+            PyClass *p = new PyClass();
+
+            /* Assign any additional state */
+            std::istringstream str(t[0].cast<std::string>());
+               p->Read(str, true, false);
+
+            return p;
+          }
+     ));
     }
 }
 
@@ -677,9 +1202,11 @@ void pybind_regression_tree(py::module &m) {
                py::arg("regclasses_out"),
                py::arg("stats_out"))
           .def("Read", &PyClass::Read,
-               py::arg("in_stream"), py::arg("binary"), py::arg("am"))
+               py::arg("in_stream"), py::arg("binary"), py::arg("am"),
+      py::call_guard<py::gil_scoped_release>())
           .def("Write", &PyClass::Write,
-               py::arg("out_stream"), py::arg("binary"))
+               py::arg("out_stream"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
           .def("NumBaseclasses", &PyClass::NumBaseclasses)
           .def("GetBaseclass", &PyClass::GetBaseclass, py::arg("bclass"))
           .def("Gauss2BaseclassId", &PyClass::Gauss2BaseclassId, py::arg("pdf_id"), py::arg("gauss_id"));
@@ -722,9 +1249,11 @@ void pybind_regtree_fmllr_diag_gmm(py::module &m) {
                py::arg("in"),
                py::arg("out"))
           .def("Read", &PyClass::Read,
-               py::arg("in_stream"), py::arg("binary"))
+               py::arg("in_stream"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
           .def("Write", &PyClass::Write,
-               py::arg("out_stream"), py::arg("binary"))
+               py::arg("out_stream"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
           .def("Dim", &PyClass::Dim)
           .def("NumBaseClasses", &PyClass::NumBaseClasses)
           .def("NumRegClasses", &PyClass::NumRegClasses)
@@ -774,9 +1303,11 @@ void pybind_regtree_fmllr_diag_gmm(py::module &m) {
                py::arg("auxf_impr"),
                py::arg("tot_t"))
           .def("Read", &PyClass::Read,
-               py::arg("in_stream"), py::arg("binary"), py::arg("add"))
+               py::arg("in_stream"), py::arg("binary"), py::arg("add"),
+      py::call_guard<py::gil_scoped_release>())
           .def("Write", &PyClass::Write,
-               py::arg("out_stream"), py::arg("binary"))
+               py::arg("out_stream"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
           .def("Dim", &PyClass::Dim)
           .def("NumBaseClasses", &PyClass::NumBaseClasses)
           .def("baseclass_stats", &PyClass::baseclass_stats);
@@ -813,9 +1344,11 @@ void pybind_regtree_mllr_diag_gmm(py::module &m) {
                py::arg("pdf_index"),
                py::arg("out"))
           .def("Read", &PyClass::Read,
-               py::arg("in_stream"), py::arg("binary"))
+               py::arg("in_stream"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
           .def("Write", &PyClass::Write,
-               py::arg("out_stream"), py::arg("binary"))
+               py::arg("out_stream"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
           .def("SetParameters", &PyClass::SetParameters,
                py::arg("mat"),
                py::arg("regclass"))
@@ -859,9 +1392,11 @@ void pybind_regtree_mllr_diag_gmm(py::module &m) {
                py::arg("auxf_impr"),
                py::arg("t"))
           .def("Read", &PyClass::Read,
-               py::arg("in_stream"), py::arg("binary"), py::arg("add"))
+               py::arg("in_stream"), py::arg("binary"), py::arg("add"),
+      py::call_guard<py::gil_scoped_release>())
           .def("Write", &PyClass::Write,
-               py::arg("out_stream"), py::arg("binary"))
+               py::arg("out_stream"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
           .def("Dim", &PyClass::Dim)
           .def("NumBaseClasses", &PyClass::NumBaseClasses)
           .def("baseclass_stats", &PyClass::baseclass_stats);
@@ -891,11 +1426,14 @@ void pybind_transform_common(py::module &m) {
           .def("CopyStats", &PyClass::CopyStats,
                py::arg("other"))
           .def("Add", &PyClass::Add,
+      py::call_guard<py::gil_scoped_release>(),
                py::arg("other"))
           .def("Read", &PyClass::Read,
-               py::arg("in_stream"), py::arg("binary"), py::arg("add"))
+               py::arg("in_stream"), py::arg("binary"), py::arg("add"),
+      py::call_guard<py::gil_scoped_release>())
           .def("Write", &PyClass::Write,
-               py::arg("out_stream"), py::arg("binary"));
+               py::arg("out_stream"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>());
     }
   m.def("ComposeTransforms",
         &ComposeTransforms,
@@ -903,6 +1441,17 @@ void pybind_transform_common(py::module &m) {
         py::arg("b"),
         py::arg("b_is_affine"),
         py::arg("c"));
+  m.def("compose_transforms",
+          [](const Matrix<BaseFloat> &a, const Matrix<BaseFloat> &b,
+                       bool b_is_affine){
+          py::gil_scoped_release gil_release;
+                Matrix<BaseFloat> c;
+                ComposeTransforms(a, b, b_is_affine, &c);
+                return c;
+                       },
+        py::arg("a"),
+        py::arg("b"),
+        py::arg("b_is_affine"));
   m.def("ApplyAffineTransform",
         &ApplyAffineTransform,
         "Applies the affine transform 'xform' to the vector 'vec' and overwrites the "
@@ -928,4 +1477,101 @@ void init_transform(py::module &_m) {
      pybind_regression_tree(m);
      pybind_regtree_fmllr_diag_gmm(m);
      pybind_regtree_mllr_diag_gmm(m);
+
+     m.def("accumulate_from_alignment",
+               [](
+                         const TransitionModel &trans_model,
+                         const AmDiagGmm &am_gmm,
+                         const Matrix<BaseFloat> &feats,
+                         const std::vector<int32> &ali,
+                       const ConstIntegerSet<int32> &silence_set,
+                            FmllrDiagGmmAccs *spk_stats,
+                       BaseFloat silence_scale,
+                         BaseFloat rand_prune = 0.0,
+                       bool distributed = false,
+                       bool two_models = false
+               ){
+          py::gil_scoped_release gil_release;
+               Posterior pdf_post;
+               Posterior post;
+               AlignmentToPosterior(ali, &post);
+               if (distributed)
+               WeightSilencePostDistributed(trans_model, silence_set,
+                                             silence_scale, &post);
+               else
+                    WeightSilencePost(trans_model, silence_set,
+                              silence_scale, &post);
+                    ConvertPosteriorToPdfs(trans_model, post, &pdf_post);
+                    if (!two_models){
+                         for (size_t i = 0; i < pdf_post.size(); i++) {
+                         for (size_t j = 0; j < pdf_post[i].size(); j++) {
+                              int32 pdf_id = pdf_post[i][j].first;
+                              spk_stats->AccumulateForGmm(am_gmm.GetPdf(pdf_id),
+                                                       feats.Row(i),
+                                                       pdf_post[i][j].second);
+                         }
+                         }
+                    }
+                    else{
+
+
+                         GaussPost gpost(pdf_post.size());
+                         BaseFloat tot_like_this_file = 0.0, tot_weight = 0.0;
+                         for (size_t i = 0; i < pdf_post.size(); i++) {
+                              gpost[i].reserve(pdf_post[i].size());
+                              for (size_t j = 0; j < pdf_post[i].size(); j++) {
+                              int32 pdf_id = pdf_post[i][j].first;
+                              BaseFloat weight = pdf_post[i][j].second;
+                              const DiagGmm &gmm = am_gmm.GetPdf(pdf_id);
+                              Vector<BaseFloat> this_post_vec;
+                              BaseFloat like =
+                                   gmm.ComponentPosteriors(feats.Row(i), &this_post_vec);
+                              this_post_vec.Scale(weight);
+                              if (rand_prune > 0.0)
+                              for (int32 k = 0; k < this_post_vec.Dim(); k++)
+                                   this_post_vec(k) = RandPrune(this_post_vec(k),
+                                                                 rand_prune);
+                              if (!this_post_vec.IsZero())
+                              gpost[i].push_back(std::make_pair(pdf_id, this_post_vec));
+                              tot_like_this_file += like * weight;
+                              tot_weight += weight;
+                              }
+                         }
+                         for (size_t i = 0; i < gpost.size(); i++) {
+                              for (size_t j = 0; j < gpost[i].size(); j++) {
+                                   int32 pdf_id = gpost[i][j].first;
+                                   const Vector<BaseFloat> & posterior(gpost[i][j].second);
+
+                                   spk_stats->AccumulateFromPosteriors(am_gmm.GetPdf(pdf_id),
+                                                                      feats.Row(i), posterior);
+
+                              }
+                              }
+                    }
+          },
+               py::arg("trans_model"),
+               py::arg("am_gmm"),
+               py::arg("feats"),
+               py::arg("ali"),
+               py::arg("silence_set"),
+               py::arg("spk_stats"),
+               py::arg("silence_scale"),
+               py::arg("rand_prune") = 0.0,
+               py::arg("distributed") = false,
+               py::arg("two_models") = false);
+
+          m.def("compute_fmllr_transform",
+               [](FmllrDiagGmmAccs* f, int32 dim,
+               const FmllrOptions &fmllr_opts){
+          py::gil_scoped_release gil_release;
+
+                    BaseFloat impr, tot_t;
+                    Matrix<BaseFloat> transform(dim, dim+1);
+                    transform.SetUnit();
+                    f->Update(fmllr_opts, &transform, &impr, &tot_t);
+                    return transform;
+               },
+               py::arg("f"),
+               py::arg("am_gmm"),
+               py::arg("fmllr_opts"));
 }

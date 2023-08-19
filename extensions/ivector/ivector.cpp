@@ -101,7 +101,28 @@ void pybind_ivector_extractor(py::module &m) {
         m, "IvectorEstimationOptions");
     ivector_estimation_options.def(py::init<>())
       .def_readwrite("acoustic_weight", &PyClass::acoustic_weight)
-      .def_readwrite("max_count", &PyClass::max_count);
+      .def_readwrite("max_count", &PyClass::max_count)
+      .def(py::pickle(
+        [](const PyClass &p) { // __getstate__
+            /* Return a tuple that fully encodes the state of the object */
+            return py::make_tuple(
+                p.acoustic_weight,
+                p.max_count);
+        },
+        [](py::tuple t) { // __setstate__
+            if (t.size() != 2)
+                throw std::runtime_error("Invalid state!");
+
+            /* Create a new C++ instance */
+            PyClass opts;
+
+            /* Assign any additional state */
+            opts.acoustic_weight = t[0].cast<double>();
+            opts.max_count = t[1].cast<double>();
+
+            return opts;
+        }
+    ));
   }
 
   {
@@ -133,7 +154,30 @@ void pybind_ivector_extractor(py::module &m) {
     ivector_extractor_options.def(py::init<>())
       .def_readwrite("ivector_dim", &PyClass::ivector_dim)
       .def_readwrite("num_iters", &PyClass::num_iters)
-      .def_readwrite("use_weights", &PyClass::use_weights);
+      .def_readwrite("use_weights", &PyClass::use_weights)
+      .def(py::pickle(
+        [](const PyClass &p) { // __getstate__
+            /* Return a tuple that fully encodes the state of the object */
+            return py::make_tuple(
+                p.ivector_dim,
+                p.num_iters,
+                p.use_weights);
+        },
+        [](py::tuple t) { // __setstate__
+            if (t.size() != 2)
+                throw std::runtime_error("Invalid state!");
+
+            /* Create a new C++ instance */
+            PyClass opts;
+
+            /* Assign any additional state */
+            opts.ivector_dim = t[0].cast<int>();
+            opts.num_iters = t[1].cast<int>();
+            opts.use_weights = t[1].cast<bool>();
+
+            return opts;
+        }
+    ));
   }
 
   {
@@ -249,10 +293,12 @@ void pybind_ivector_extractor(py::module &m) {
         &PyClass::IvectorDependentWeights)
       .def("Read", &PyClass::Read,
         py::arg("is"),
-        py::arg("binary"))
+        py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
       .def("Write", &PyClass::Write,
         py::arg("os"),
-        py::arg("binary"));
+        py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>());
   }
 
   {
@@ -304,10 +350,12 @@ void pybind_ivector_extractor(py::module &m) {
         py::arg("scale"))
       .def("Read", &PyClass::Read,
         py::arg("is"),
-        py::arg("binary"))
+        py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
       .def("Write", &PyClass::Write,
         py::arg("os"),
-        py::arg("binary"));
+        py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>());
   }
   m.def("EstimateIvectorsOnline",
         &EstimateIvectorsOnline,
@@ -343,7 +391,32 @@ void pybind_ivector_extractor(py::module &m) {
       .def_readwrite("update_variances", &PyClass::update_variances)
       .def_readwrite("compute_auxf", &PyClass::compute_auxf)
       .def_readwrite("num_samples_for_weights", &PyClass::num_samples_for_weights)
-      .def_readwrite("cache_size", &PyClass::cache_size);
+      .def_readwrite("cache_size", &PyClass::cache_size)
+      .def(py::pickle(
+        [](const PyClass &p) { // __getstate__
+            /* Return a tuple that fully encodes the state of the object */
+            return py::make_tuple(
+                p.update_variances,
+                p.compute_auxf,
+                p.num_samples_for_weights,
+                p.cache_size);
+        },
+        [](py::tuple t) { // __setstate__
+            if (t.size() != 4)
+                throw std::runtime_error("Invalid state!");
+
+            /* Create a new C++ instance */
+            PyClass opts;
+
+            /* Assign any additional state */
+            opts.update_variances = t[0].cast<bool>();
+            opts.compute_auxf = t[1].cast<bool>();
+            opts.num_samples_for_weights = t[2].cast<int32>();
+            opts.cache_size = t[3].cast<bool>();
+
+            return opts;
+        }
+    ));
   }
   {
     using PyClass = IvectorExtractorEstimationOptions;
@@ -354,7 +427,32 @@ void pybind_ivector_extractor(py::module &m) {
       .def_readwrite("variance_floor_factor", &PyClass::variance_floor_factor)
       .def_readwrite("gaussian_min_count", &PyClass::gaussian_min_count)
       .def_readwrite("num_threads", &PyClass::num_threads)
-      .def_readwrite("diagonalize", &PyClass::diagonalize);
+      .def_readwrite("diagonalize", &PyClass::diagonalize)
+      .def(py::pickle(
+        [](const PyClass &p) { // __getstate__
+            /* Return a tuple that fully encodes the state of the object */
+            return py::make_tuple(
+                p.variance_floor_factor,
+                p.gaussian_min_count,
+                p.num_threads,
+                p.diagonalize);
+        },
+        [](py::tuple t) { // __setstate__
+            if (t.size() != 4)
+                throw std::runtime_error("Invalid state!");
+
+            /* Create a new C++ instance */
+            PyClass opts;
+
+            /* Assign any additional state */
+            opts.variance_floor_factor = t[0].cast<double>();
+            opts.gaussian_min_count = t[1].cast<double>();
+            opts.num_threads = t[2].cast<int32>();
+            opts.diagonalize = t[3].cast<bool>();
+
+            return opts;
+        }
+    ));
   }
   {
     using PyClass = IvectorExtractorStats;
@@ -375,22 +473,26 @@ void pybind_ivector_extractor(py::module &m) {
                             const Posterior &>(&PyClass::AccStatsForUtterance),
         py::arg("extractor"),
         py::arg("feats"),
-        py::arg("post"))
+        py::arg("post"),
+      py::call_guard<py::gil_scoped_release>())
       .def("AccStatsForUtterance",
         py::overload_cast<const IvectorExtractor &,
                               const MatrixBase<BaseFloat> &,
                               const FullGmm &>(&PyClass::AccStatsForUtterance),
         py::arg("extractor"),
         py::arg("feats"),
-        py::arg("fgmm"))
+        py::arg("fgmm"),
+      py::call_guard<py::gil_scoped_release>())
       .def("Read", &PyClass::Read,
         py::arg("is"),
         py::arg("binary"),
-        py::arg("add") = false)
+        py::arg("add") = false,
+      py::call_guard<py::gil_scoped_release>())
       .def("Write",
       py::overload_cast<std::ostream &, bool>(&PyClass::Write),
         py::arg("os"),
-        py::arg("binary"))
+        py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
       .def("Update", &PyClass::Update,
       "Returns the objf improvement per frame.",
         py::arg("opts"),
@@ -416,7 +518,32 @@ void pybind_logistic_regression(py::module &m) {
       .def_readwrite("max_steps", &PyClass::max_steps)
       .def_readwrite("mix_up", &PyClass::mix_up)
       .def_readwrite("normalizer", &PyClass::normalizer)
-      .def_readwrite("power", &PyClass::power);
+      .def_readwrite("power", &PyClass::power)
+      .def(py::pickle(
+        [](const PyClass &p) { // __getstate__
+            /* Return a tuple that fully encodes the state of the object */
+            return py::make_tuple(
+                p.max_steps,
+                p.mix_up,
+                p.normalizer,
+                p.power);
+        },
+        [](py::tuple t) { // __setstate__
+            if (t.size() != 4)
+                throw std::runtime_error("Invalid state!");
+
+            /* Create a new C++ instance */
+            PyClass opts;
+
+            /* Assign any additional state */
+            opts.max_steps = t[0].cast<int32>();
+            opts.mix_up = t[1].cast<int32>();
+            opts.normalizer = t[2].cast<double>();
+            opts.power = t[2].cast<double>();
+
+            return opts;
+        }
+    ));
   }
   {
     using PyClass = LogisticRegression;
@@ -449,12 +576,14 @@ void pybind_logistic_regression(py::module &m) {
         py::arg("log_posteriors"))
       .def("Read", &PyClass::Read,
         py::arg("is"),
-        py::arg("binary"))
+        py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
       .def("Write", &PyClass::Write,
         py::arg("os"),
         py::arg("binary"))
       .def("ScalePriors", &PyClass::ScalePriors,
-        py::arg("prior_scales"));
+        py::arg("prior_scales"),
+      py::call_guard<py::gil_scoped_release>());
   }
 }
 
@@ -467,7 +596,28 @@ void pybind_plda(py::module &m) {
         m, "PldaConfig");
     plda_config.def(py::init<>())
       .def_readwrite("normalize_length", &PyClass::normalize_length)
-      .def_readwrite("simple_length_norm", &PyClass::simple_length_norm);
+      .def_readwrite("simple_length_norm", &PyClass::simple_length_norm)
+      .def(py::pickle(
+        [](const PyClass &p) { // __getstate__
+            /* Return a tuple that fully encodes the state of the object */
+            return py::make_tuple(
+                p.normalize_length,
+                p.simple_length_norm);
+        },
+        [](py::tuple t) { // __setstate__
+            if (t.size() != 2)
+                throw std::runtime_error("Invalid state!");
+
+            /* Create a new C++ instance */
+            PyClass opts;
+
+            /* Assign any additional state */
+            opts.normalize_length = t[0].cast<bool>();
+            opts.simple_length_norm = t[1].cast<bool>();
+
+            return opts;
+        }
+    ));
   }
   {
     using PyClass = Plda;
@@ -477,6 +627,92 @@ void pybind_plda(py::module &m) {
     plda.def(py::init<>())
       .def(py::init<const Plda &>(),
         py::arg("other"))
+      .def("transform_ivector",
+          [](
+            PyClass &plda,
+                             const Vector<float> &ivector,
+                             int32 num_examples
+          ){
+          py::gil_scoped_release gil_release;
+          PldaConfig plda_config;
+          Vector<BaseFloat> *transformed_ivector = new Vector<BaseFloat>(plda.Dim());
+          plda.TransformIvector(plda_config, ivector,
+                                                      num_examples,
+                                                      transformed_ivector);
+          return transformed_ivector;
+          },
+        py::arg("ivector"),
+        py::arg("num_examples")
+        )
+      .def("classify_utterance",
+      [](
+            PyClass &plda,
+            const Vector<float> &utterance_ivector,
+            const std::vector<Vector<float>> &speaker_ivectors,
+            const std::vector<int32> &speaker_counts
+      ){
+          py::gil_scoped_release gil_release;
+        Vector<double> utterance_ivector_dbl(utterance_ivector);
+        Vector<float> scores;
+        scores.Resize(speaker_counts.size());
+        for (int32 i = 0; i < speaker_counts.size(); i++) {
+          Vector<double> speaker_ivector_dbl(speaker_ivectors[i]);
+          scores(i) = plda.LogLikelihoodRatio(speaker_ivector_dbl,
+                                                speaker_counts[i],
+                                                utterance_ivector_dbl);
+      }
+      int32 index;
+      BaseFloat score = scores.Max(&index);
+      return std::make_pair(index, score);
+      },
+        py::arg("utterance_ivector"),
+        py::arg("speaker_ivectors"),
+        py::arg("speaker_counts")
+      )
+      .def("generate_affinity_matrix",
+      [](
+            PyClass &plda,
+            const std::vector<Vector<float>> &ivectors
+      ){
+          py::gil_scoped_release gil_release;
+        Matrix<float> scores;
+        scores.Resize(ivectors.size(), ivectors.size());
+        for (int32 i = 0; i < ivectors.size(); i++) {
+          Vector<double> ivector_one_dbl(ivectors[i]);
+          for (int32 j = 0; j < ivectors.size(); j++) {
+            Vector<double> ivector_two_dbl(ivectors[j]);
+            scores(i, j) = plda.LogLikelihoodRatio(ivector_one_dbl,
+                                                  1,
+                                                  ivector_two_dbl);
+          }
+        }
+      return scores;
+      },
+        py::arg("ivectors")
+      )
+      .def("transform_ivectors",
+          [](
+            PyClass &plda,
+            const std::vector<Vector<float>> &ivectors,
+            std::vector<int32> num_examples
+          ){
+          py::gil_scoped_release gil_release;
+          PldaConfig plda_config;
+
+          std::vector<const Vector<BaseFloat> *> transformed_ivectors(ivectors.size());
+
+          for (int32 i = 0; i < ivectors.size(); i++) {
+            Vector<BaseFloat> *transformed_ivector = new Vector<BaseFloat>(plda.Dim());
+            plda.TransformIvector(plda_config, ivectors[i],
+                                                        num_examples[i],
+                                                        transformed_ivector);
+            transformed_ivectors[i] = transformed_ivector;
+          }
+          return transformed_ivectors;
+          },
+        py::arg("ivectors"),
+        py::arg("num_examples")
+        )
       .def("TransformIvector",
         py::overload_cast<const PldaConfig &,
                           const VectorBase<double> &,
@@ -540,7 +776,8 @@ void pybind_plda(py::module &m) {
         "the transformed iVectors.",
         py::arg("transformed_enroll_ivector"),
         py::arg("num_enroll_utts"),
-        py::arg("transformed_test_ivector"))
+        py::arg("transformed_test_ivector"),
+      py::call_guard<py::gil_scoped_release>())
       .def("SmoothWithinClassCovariance",
         &PyClass::SmoothWithinClassCovariance,
         "This function smooths the within-class covariance by adding to it, "
@@ -561,10 +798,12 @@ void pybind_plda(py::module &m) {
         &PyClass::Dim)
       .def("Read", &PyClass::Read,
         py::arg("is"),
-        py::arg("binary"))
+        py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
       .def("Write", &PyClass::Write,
         py::arg("os"),
-        py::arg("binary"));
+        py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>());
   }
   {
     using PyClass = PldaStats;
@@ -597,7 +836,26 @@ void pybind_plda(py::module &m) {
     auto plda_estimation_config = py::class_<PyClass>(
         m, "PldaEstimationConfig");
     plda_estimation_config.def(py::init<>())
-      .def_readwrite("num_em_iters", &PyClass::num_em_iters);
+      .def_readwrite("num_em_iters", &PyClass::num_em_iters)
+      .def(py::pickle(
+        [](const PyClass &p) { // __getstate__
+            /* Return a tuple that fully encodes the state of the object */
+            return py::make_tuple(
+                p.num_em_iters);
+        },
+        [](py::tuple t) { // __setstate__
+            if (t.size() != 1)
+                throw std::runtime_error("Invalid state!");
+
+            /* Create a new C++ instance */
+            PyClass opts;
+
+            /* Assign any additional state */
+            opts.num_em_iters = t[0].cast<int32>();
+
+            return opts;
+        }
+    ));
   }
   {
     using PyClass = PldaEstimator;
@@ -609,7 +867,19 @@ void pybind_plda(py::module &m) {
       .def("Estimate",
         &PyClass::Estimate,
         py::arg("config"),
-        py::arg("output"));
+        py::arg("output"))
+      .def("estimate",
+        [](
+          PyClass &plda_estimator,
+          const PldaEstimationConfig &plda_config
+        ){
+
+        Plda plda;
+        plda_estimator.Estimate(plda_config, &plda);
+        return &plda;
+        },
+        py::arg("config"),
+        py::return_value_policy::reference);
   }
   {
     using PyClass = PldaUnsupervisedAdaptorConfig;
@@ -619,7 +889,30 @@ void pybind_plda(py::module &m) {
     plda_unsupervised_adaptor_config.def(py::init<>())
       .def_readwrite("mean_diff_scale", &PyClass::mean_diff_scale)
       .def_readwrite("within_covar_scale", &PyClass::within_covar_scale)
-      .def_readwrite("between_covar_scale", &PyClass::between_covar_scale);
+      .def_readwrite("between_covar_scale", &PyClass::between_covar_scale)
+      .def(py::pickle(
+        [](const PyClass &p) { // __getstate__
+            /* Return a tuple that fully encodes the state of the object */
+            return py::make_tuple(
+                p.mean_diff_scale,
+                p.within_covar_scale,
+                p.between_covar_scale);
+        },
+        [](py::tuple t) { // __setstate__
+            if (t.size() != 3)
+                throw std::runtime_error("Invalid state!");
+
+            /* Create a new C++ instance */
+            PyClass opts;
+
+            /* Assign any additional state */
+            opts.mean_diff_scale = t[0].cast<BaseFloat>();
+            opts.within_covar_scale = t[1].cast<BaseFloat>();
+            opts.between_covar_scale = t[2].cast<BaseFloat>();
+
+            return opts;
+        }
+    ));
   }
   {
     using PyClass = PldaUnsupervisedAdaptor;
@@ -656,10 +949,41 @@ void pybind_voice_activity_detection(py::module &m) {
       .def_readwrite("vad_energy_threshold", &PyClass::vad_energy_threshold)
       .def_readwrite("vad_energy_mean_scale", &PyClass::vad_energy_mean_scale)
       .def_readwrite("vad_frames_context", &PyClass::vad_frames_context)
-      .def_readwrite("vad_proportion_threshold", &PyClass::vad_proportion_threshold);
+      .def_readwrite("vad_proportion_threshold", &PyClass::vad_proportion_threshold)
+      .def(py::pickle(
+        [](const PyClass &p) { // __getstate__
+            /* Return a tuple that fully encodes the state of the object */
+            return py::make_tuple(
+                p.vad_energy_threshold,
+                p.vad_energy_mean_scale,
+                p.vad_frames_context,
+                p.vad_proportion_threshold);
+        },
+        [](py::tuple t) { // __setstate__
+            if (t.size() != 4)
+                throw std::runtime_error("Invalid state!");
+
+            /* Create a new C++ instance */
+            PyClass opts;
+
+            /* Assign any additional state */
+            opts.vad_energy_threshold = t[0].cast<BaseFloat>();
+            opts.vad_energy_mean_scale = t[1].cast<BaseFloat>();
+            opts.vad_frames_context = t[2].cast<int32>();
+            opts.vad_proportion_threshold = t[3].cast<BaseFloat>();
+
+            return opts;
+        }
+    ));
   }
   m.def("ComputeVadEnergy",
-        &ComputeVadEnergy,
+      [](const VadEnergyOptions &opts,
+                      const MatrixBase<BaseFloat> &input_features){
+      Vector<BaseFloat> vad_result(input_features.NumRows());
+
+      ComputeVadEnergy(opts, input_features, &vad_result);
+      return vad_result;
+      },
         "Compute voice-activity vector for a file: 1 if we judge the frame as "
         "voiced, 0 otherwise.  There are no continuity constraints. "
         "This method is a very simple energy-based method which only looks "
@@ -670,8 +994,7 @@ void pybind_voice_activity_detection(py::module &m) {
         "proportion of frames in a context window around the current frame, "
         "which are above this cutoff.",
         py::arg("opts"),
-        py::arg("input_features"),
-        py::arg("output_voiced"));
+        py::arg("input_features"));
 }
 
 void init_ivector(py::module &_m) {
@@ -682,4 +1005,104 @@ void init_ivector(py::module &_m) {
   pybind_logistic_regression(m);
   pybind_plda(m);
   pybind_voice_activity_detection(m);
+
+  m.def("ivector_extract",
+    [](
+    const DiagGmm &gmm,
+      const IvectorExtractor &extractor,
+      const Matrix<BaseFloat> &feats,
+
+      double acoustic_weight = 1.0,
+      double max_count = 0.0,
+      int32 num_post = 50,
+      BaseFloat min_post = 0.0
+    ) -> Vector<double> {
+      IvectorEstimationOptions opts;
+      opts.acoustic_weight = acoustic_weight;
+      opts.max_count = max_count;
+      int32 T = feats.NumRows();
+      std::vector<std::vector<int32> > gselect(T);
+
+      Matrix<BaseFloat> loglikes;
+
+      gmm.LogLikelihoods(feats, &loglikes);
+
+      Posterior posterior(T);
+
+      double log_like_this_file = 0.0;
+      for (int32 t = 0; t < T; t++) {
+        log_like_this_file +=
+            VectorToPosteriorEntry(loglikes.Row(t), num_post,
+                                   min_post, &(posterior[t]));
+      }
+
+
+        double this_t = opts.acoustic_weight * TotalPosterior(posterior),
+            max_count_scale = 1.0;
+        if (opts.max_count > 0 && this_t > opts.max_count) {
+          max_count_scale = opts.max_count / this_t;
+          KALDI_LOG << "Scaling stats for utterance by scale "
+                    << max_count_scale << " due to --max-count="
+                    << opts.max_count;
+          this_t = opts.max_count;
+        }
+        ScalePosterior(opts.acoustic_weight * max_count_scale,
+                        &posterior);
+
+      bool need_2nd_order_stats = false;
+
+      IvectorExtractorUtteranceStats utt_stats(extractor.NumGauss(),
+                                              extractor.FeatDim(),
+                                              need_2nd_order_stats);
+
+    utt_stats.AccStats(feats, posterior);
+
+    Vector<double> ivector;
+    ivector.Resize(extractor.IvectorDim());
+    ivector(0) = extractor.PriorOffset();
+    extractor.GetIvectorDistribution(utt_stats, &ivector, NULL);
+
+    return ivector;
+    },
+        py::arg("gmm"),
+        py::arg("extractor"),
+        py::arg("feats"),
+        py::arg("acoustic_weight") = 1.0,
+        py::arg("max_count") = 0.0,
+        py::arg("num_post") = 50,
+        py::arg("min_post") = 0.0);
+
+  m.def("ivector_normalize_length",
+    [](
+    Vector<BaseFloat>* ivector,
+      bool normalize = true,
+      bool scaleup = true
+    ) {
+          py::gil_scoped_release gil_release;
+      BaseFloat norm = ivector->Norm(2.0);
+      BaseFloat ratio = norm / sqrt(ivector->Dim());
+      if (!scaleup) ratio = norm;
+      if (normalize) ivector->Scale(1.0 / ratio);
+    },
+        py::arg("ivector"),
+        py::arg("normalize") = true,
+        py::arg("scaleup") = true);
+
+  m.def("ivector_subtract_mean",
+    [](
+        std::vector<Vector<float>*> &ivectors
+    ) {
+          py::gil_scoped_release gil_release;
+      Vector<double> sum;
+
+        for (size_t i = 0; i < ivectors.size(); i++) {
+          if (sum.Dim() == 0) sum.Resize(ivectors[i]->Dim());
+          sum.AddVec(1.0, *ivectors[i]);
+        }
+        for (size_t i = 0; i < ivectors.size(); i++) {
+          Vector<BaseFloat> *ivector = ivectors[i];
+            ivector->AddVec(-1.0 / ivectors.size(), sum);
+        }
+    },
+        py::arg("ivectors"));
 }

@@ -68,7 +68,8 @@ void pybind_lm_arpa_file_parser(py::module &m) {
     arpa_file_parser.def(py::init<const ArpaParseOptions&, fst::SymbolTable* >(),
                         py::arg("options"),
                         py::arg("symbols"))
-      .def("Read", &PyClass::Read, py::arg("is"))
+      .def("Read", &PyClass::Read, py::arg("is"),
+      py::call_guard<py::gil_scoped_release>())
       .def("Options", &PyClass::Options);
   }
 }
@@ -101,16 +102,29 @@ void pybind_lm_const_arpa_lm(py::module &m) {
         &PyClass::Read,
         "Reads the ConstArpaLm format language model. It calls ReadInternal() or "
         "ReadInternalOldFormat() to do the actual reading.",
-        py::arg("is"), py::arg("binary"))
+        py::arg("is"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
+      .def_static("read_from_file",
+        [](const std::string &filename){
+          static ConstArpaLm const_arpa;
+        ReadKaldiObject(filename, &const_arpa);
+        return const_arpa;
+        },
+        "Reads the ConstArpaLm format language model. It calls ReadInternal() or "
+        "ReadInternalOldFormat() to do the actual reading.",
+        py::arg("filename"), py::return_value_policy::take_ownership,
+      py::call_guard<py::gil_scoped_release>())
       .def("Write",
         &PyClass::Write,
         "Writes the language model in ConstArpaLm format.",
-        py::arg("os"), py::arg("binary"))
+        py::arg("os"), py::arg("binary"),
+      py::call_guard<py::gil_scoped_release>())
       .def("WriteArpa",
         &PyClass::WriteArpa,
         "Creates Arpa format language model from ConstArpaLm format, and writes it "
         "to output stream. This will be useful in testing.",
-        py::arg("os"))
+        py::arg("os"),
+      py::call_guard<py::gil_scoped_release>())
       .def("GetNgramLogprob",
         &PyClass::GetNgramLogprob,
         "Wrapper of GetNgramLogprobRecurse. It first maps possible out-of-vocabulary "
@@ -136,7 +150,7 @@ void pybind_lm_const_arpa_lm(py::module &m) {
   {
     using PyClass = ConstArpaLmDeterministicFst;
 
-    auto const_arpa_lm_deterministic = py::class_<ConstArpaLmDeterministicFst>(
+    auto const_arpa_lm_deterministic = py::class_<ConstArpaLmDeterministicFst, DeterministicOnDemandFst<fst::StdArc>>(
         m, "ConstArpaLmDeterministicFst");
     const_arpa_lm_deterministic.def(py::init<const ConstArpaLm&>(),
         py::arg("lm"))
@@ -337,5 +351,73 @@ void init_lm(py::module &_m) {
   pybind_lm_const_arpa_lm(m);
   pybind_lm_kaldi_rnnlm(m);
   pybind_lm_mikolov_rnnlm_lib(m);
+
+    m.def("arpa_to_fst",
+    [](
+      std::string arpa_rxfilename,
+      py::handle symbol_table,
+    std::string disambig_symbol = "#0",
+    std::string bos_symbol = "<s>",
+    std::string eos_symbol = "</s>",
+    bool ilabel_sort = true
+    ){
+        auto pywrapfst_mod = py::module_::import("pywrapfst");
+        auto ptr = reinterpret_cast<SymbolTableStruct*>(symbol_table.ptr());
+      fst::SymbolTable* symbols = ptr->_smart_table.get();
+    int64 disambig_symbol_id = 0;
+
+    ArpaParseOptions options;
+    options.max_warnings = -1;
+      options.oov_handling = ArpaParseOptions::kSkipNGram;
+      if (!disambig_symbol.empty()) {
+        disambig_symbol_id = symbols->Find(disambig_symbol);
+        if (disambig_symbol_id == -1) // fst::kNoSymbol
+          KALDI_ERR << "Symbol table has no symbol for " << disambig_symbol;
+      }
+    // Add or use existing BOS and EOS.
+    options.bos_symbol = symbols->AddSymbol(bos_symbol);
+    options.eos_symbol = symbols->AddSymbol(eos_symbol);
+
+    ArpaLmCompiler lm_compiler(options, disambig_symbol_id, symbols);
+    {
+      Input ki(arpa_rxfilename);
+      lm_compiler.Read(ki.Stream());
+    }
+    if (ilabel_sort) {
+      fst::ArcSort(lm_compiler.MutableFst(), fst::StdILabelCompare());
+    }
+    return lm_compiler.Fst();
+    },
+        py::arg("arpa_rxfilename"),
+        py::arg("symbols"),
+        py::arg("disambig_symbol") = "#0",
+        py::arg("bos_symbol") = "<s>",
+        py::arg("eos_symbol") = "</s>",
+        py::arg("ilabel_sort") = true);
+
+    m.def("arpa_to_const_arpa",
+    [](
+      std::string arpa_rxfilename,
+      std::string const_arpa_wxfilename,
+      fst::SymbolTable* symbols,
+    int32 unk_symbol,
+    int32 bos_symbol,
+    int32 eos_symbol
+    ){
+
+    ArpaParseOptions options;
+    options.unk_symbol = unk_symbol;
+    options.bos_symbol = bos_symbol;
+    options.eos_symbol = eos_symbol;
+    bool ans = BuildConstArpaLm(options, arpa_rxfilename,
+                                const_arpa_wxfilename);
+    return ans;
+    },
+        py::arg("arpa_rxfilename"),
+        py::arg("const_arpa_wxfilename"),
+        py::arg("symbols"),
+        py::arg("unk_symbol"),
+        py::arg("bos_symbol"),
+        py::arg("eos_symbol"));
 
 }

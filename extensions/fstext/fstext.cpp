@@ -2,6 +2,7 @@
 #include "fstext/pybind_fstext.h"
 #include "util/pybind_util.h"
 #include "fst/fst.h"
+#include "fst/arc-map.h"
 #include "fstext/context-fst.h"
 #include "fstext/deterministic-fst.h"
 #include "fstext/determinize-star.h"
@@ -22,6 +23,10 @@
 #include "fstext/trivial-factor-weight.h"
 #include "fst/fstlib.h"
 #include "fst/fst-decl.h"
+#include "fstext/lattice-weight.h"
+#include "lat/kaldi-lattice.h"
+#include "hmm/transition-model.h"
+#include "hmm/hmm-utils.h"
 
 using namespace kaldi;
 using namespace fst;
@@ -174,15 +179,17 @@ void pybind_kaldi_fst_io(py::module& m) {
     py::class_<PyClass>(m, "VectorFstHolder")
         .def(py::init<>())
         .def_static("Write", &PyClass::Write, py::arg("os"), py::arg("binary"),
-                    py::arg("t"))
+                    py::arg("t"),
+      py::call_guard<py::gil_scoped_release>())
         .def("Copy", &PyClass::Copy)
-        .def("Read", &PyClass::Read, "Reads into the holder.", py::arg("is"));
+        .def("Read", &PyClass::Read, "Reads into the holder.", py::arg("is"),
+      py::call_guard<py::gil_scoped_release>());
   }
+
 }
 
 template<class F>
 void pybind_table_matcher(py::module &m){
-{
     py::class_<MatcherBase<typename F::Arc>>(m, "MatcherBase", "MatcherBase");
   auto tm = py::class_<TableMatcher<F>, MatcherBase<typename F::Arc>>(
       m, "TableMatcher",
@@ -193,17 +200,78 @@ void pybind_table_matcher(py::module &m){
         .def("Find", &TableMatcher<F>::Find, py::arg("match_label"))
         .def("Next", &TableMatcher<F>::Next)
         .def("Done", &TableMatcher<F>::Done);
+
   auto tcc = py::class_<TableComposeCache<F>>(m, "TableComposeCache");
-    tcc.def(py::init<const TableComposeOptions &>());
-        }
+    tcc.def(py::init<const TableComposeOptions &>())
+      .def_readwrite("matcher", &TableComposeCache<F>::matcher)
+      .def_readwrite("opts", &TableComposeCache<F>::opts);
 }
 template<class Arc>
 void pybind_table_compose(py::module &m){
 
     m.def("TableCompose", (void (*)(const Fst<Arc> &,
-    const Fst<Arc> &, MutableFst<Arc> *, const TableComposeOptions &))(&TableCompose<Arc>));
+    const Fst<Arc> &, MutableFst<Arc> *, const TableComposeOptions &))(&TableCompose<Arc>),
+        py::arg("ifst1"),
+        py::arg("ifst2"),
+        py::arg("ofst"),
+        py::arg("opts") =  TableComposeOptions());
     m.def("TableCompose", (void (*)(const Fst<Arc> &,
-    const Fst<Arc> &, MutableFst<Arc> *, TableComposeCache<Fst<Arc>> *))(&TableCompose<Arc>));
+    const Fst<Arc> &, MutableFst<Arc> *, TableComposeCache<Fst<Arc>> *))(&TableCompose<Arc>),
+        py::arg("ifst1"),
+        py::arg("ifst2"),
+        py::arg("ofst"),
+        py::arg("cache"));
+
+    m.def("fst_table_compose",
+    [](const Fst<Arc> &fst1, const Fst<Arc> &fst2,
+    const std::string match_side = "left",
+    const std::string compose_filter = "sequence",
+    TableComposeCache<Fst<Arc> > *cache =  nullptr
+    ){
+      TableComposeOptions opts;
+
+      if (match_side == "left") {
+            opts.table_match_type = MATCH_OUTPUT;
+      } else if (match_side == "right") {
+            opts.table_match_type = MATCH_INPUT;
+      } else {
+            KALDI_ERR << "Invalid match-side option: " << match_side;
+      }
+
+      if (compose_filter == "alt_sequence") {
+            opts.filter_type = ALT_SEQUENCE_FILTER;
+      } else if (compose_filter == "auto") {
+            opts.filter_type = AUTO_FILTER;
+      } else  if (compose_filter == "match") {
+            opts.filter_type = MATCH_FILTER;
+      } else  if (compose_filter == "sequence") {
+            opts.filter_type = SEQUENCE_FILTER;
+      } else {
+            KALDI_ERR << "Invalid compose-filter option: " << compose_filter;
+      }
+      // Checks if <fst1> is olabel sorted and <fst2> is ilabel sorted.
+      if (fst1.Properties(fst::kOLabelSorted, true) == 0) {
+        KALDI_WARN << "The first FST is not olabel sorted.";
+      }
+      if (fst2.Properties(fst::kILabelSorted, true) == 0) {
+        KALDI_WARN << "The second FST is not ilabel sorted.";
+      }
+      VectorFst<Arc> composed_fst;
+      if (cache){
+        TableCompose(fst1, fst2, &composed_fst, cache);
+
+      }
+      else{
+            TableCompose(fst1, fst2, &composed_fst, opts);
+
+      }
+      return composed_fst;
+    },
+        py::arg("fst1"),
+        py::arg("fst2"),
+        py::arg("match_side") = "left",
+        py::arg("compose_filter") = "sequence",
+        py::arg("cache") =  nullptr);
 }
 
 void pybind_fstext_context_fst(py::module &m) {
@@ -273,7 +341,7 @@ void pybind_fstext_context_fst(py::module &m) {
       "super-final state that has unit final-probability and a unit-weight self-loop "
       "with '$' on its input and <eps> on its output.  The reason we don't just "
       "add a loop to each final-state has to do with preserving stochasticity "
-      "(see \ref fst_algo_stochastic).  We keep the final-probability in all the "
+      "(see \\ref fst_algo_stochastic).  We keep the final-probability in all the "
       "original final-states rather than setting them to zero, so the resulting FST "
       "can accept zero '$' symbols at the end (in case we had no right context).",
       py::arg("subseq_symbol"),
@@ -751,19 +819,22 @@ void pybind_fstext_fstext_utils(py::module &m) {
         py::arg("fst"),
         py::arg("delta") = kDelta,
         py::arg("debug_ptr") = NULL,
-        py::arg("max_states") = -1);
+        py::arg("max_states") = -1,
+      py::call_guard<py::gil_scoped_release>());
 
   m.def("PushInLogInitial",
         &PushInLog<REWEIGHT_TO_INITIAL>,
         py::arg("fst"),
         py::arg("ptype"),
-        py::arg("delta") = kDelta);
+        py::arg("delta") = kDelta,
+      py::call_guard<py::gil_scoped_release>());
 
   m.def("PushInLogFinal",
         &PushInLog<REWEIGHT_TO_FINAL>,
         py::arg("fst"),
         py::arg("ptype"),
-        py::arg("delta") = kDelta);
+        py::arg("delta") = kDelta,
+      py::call_guard<py::gil_scoped_release>());
 
   m.def("MinimizeEncoded",
         &MinimizeEncoded<StdArc>,
@@ -775,10 +846,19 @@ void pybind_fstext_fstext_utils(py::module &m) {
       "in combinable paths are the same... hard to formalize this, but it's something "
       "that is satisified by our normal FSTs.",
         py::arg("fst"),
-        py::arg("delta") = kDelta);
+        py::arg("delta") = kDelta,
+      py::call_guard<py::gil_scoped_release>());
 
   m.def("GetLinearSymbolSequence",
-        &GetLinearSymbolSequence<StdArc, int32>,
+            [](const fst::VectorFst<LatticeArc>& decoded){
+            LatticeWeight weight;
+            std::vector<int32> alignment;
+            std::vector<int32> words;
+          py::gil_scoped_release release;
+            GetLinearSymbolSequence(decoded, &alignment, &words, &weight);
+            py::gil_scoped_acquire acquire;
+            return py::make_tuple(alignment, words, weight);
+            },
         "GetLinearSymbolSequence gets the symbol sequence from a linear FST. "
       "If the FST is not just a linear sequence, it returns false.   If it is "
       "a linear sequence (including the empty FST), it returns true.  In this "
@@ -787,10 +867,7 @@ void pybind_fstext_fstext_utils(py::module &m) {
       "the total weight as \"tot_weight\". The total weight will be Weight::Zero() "
       "if the FST is empty.  If any of the output pointers are NULL, it does not "
       "create that output.",
-        py::arg("fst"),
-        py::arg("isymbols_out"),
-        py::arg("osymbols_out"),
-        py::arg("tot_weight_out"));
+        py::arg("fst"));
 
   m.def("ConvertNbestToVector",
         &ConvertNbestToVector<StdArc>,
@@ -816,7 +893,8 @@ void pybind_fstext_fstext_utils(py::module &m) {
         &MakeLinearAcceptor<StdArc, int32>,
         "Creates unweighted linear acceptor from symbol sequence.",
         py::arg("labels"),
-        py::arg("ofst"));
+        py::arg("ofst"),
+      py::call_guard<py::gil_scoped_release>());
 
   m.def("MakeLinearAcceptorWithAlternatives",
         &MakeLinearAcceptorWithAlternatives<StdArc, int32>,
@@ -836,7 +914,8 @@ void pybind_fstext_fstext_utils(py::module &m) {
             "log and do this, and maintain equivalence in tropical.",
         py::arg("ifst"),
         py::arg("ofst"),
-        py::arg("delta") = kDelta);
+        py::arg("delta") = kDelta,
+      py::call_guard<py::gil_scoped_release>());
 
   m.def("SafeDeterminizeMinimizeWrapper",
         &SafeDeterminizeMinimizeWrapper<StdArc>,
@@ -844,7 +923,8 @@ void pybind_fstext_fstext_utils(py::module &m) {
             "minimizes (encoded minimization, which is safe).  This algorithm will destroy \"ifst\".",
         py::arg("ifst"),
         py::arg("ofst"),
-        py::arg("delta") = kDelta);
+        py::arg("delta") = kDelta,
+      py::call_guard<py::gil_scoped_release>());
 
   m.def("SafeDeterminizeMinimizeWrapperInLog",
         &SafeDeterminizeMinimizeWrapperInLog,
@@ -852,14 +932,16 @@ void pybind_fstext_fstext_utils(py::module &m) {
 "it first casts tothe log semiring.",
         py::arg("ifst"),
         py::arg("ofst"),
-        py::arg("delta") = kDelta);
+        py::arg("delta") = kDelta,
+      py::call_guard<py::gil_scoped_release>());
 
   m.def("RemoveSomeInputSymbols",
         &RemoveSomeInputSymbols<StdArc, int32>,
         "RemoveSomeInputSymbols removes any symbol that appears in \"to_remove\", from "
 "the input side of the FST, replacing them with epsilon.",
         py::arg("to_remove"),
-        py::arg("fst"));
+        py::arg("fst"),
+      py::call_guard<py::gil_scoped_release>());
 
   /*
   m.def("MapInputSymbols",
@@ -874,7 +956,8 @@ void pybind_fstext_fstext_utils(py::module &m) {
 
   m.def("RemoveWeights",
         &RemoveWeights<StdArc>,
-        py::arg("fst"));
+        py::arg("fst"),
+      py::call_guard<py::gil_scoped_release>());
 
   m.def("PrecedingInputSymbolsAreSame",
         &PrecedingInputSymbolsAreSame<StdArc>,
@@ -897,7 +980,8 @@ void pybind_fstext_fstext_utils(py::module &m) {
             "the invalid labels.",
         py::arg("start_is_epsilon"),
         py::arg("fst"),
-        py::arg("f"));
+        py::arg("f"),
+      py::call_guard<py::gil_scoped_release>());
 
   m.def("FollowingInputSymbolsAreSame",
         &FollowingInputSymbolsAreSame<StdArc>,
@@ -976,7 +1060,8 @@ void pybind_fstext_fstext_utils(py::module &m) {
 "We could have implemented this via a combination of \"project\", "
 "\"concat\", \"union\" and \"closure\".  But that FST would have been "
 "less well optimized and would have a lot of final-states.",
-        py::arg("fsts"));
+        py::arg("fsts"),
+      py::call_guard<py::gil_scoped_release>());
 
   m.def("ApplyProbabilityScale",
         &ApplyProbabilityScale<StdArc>,
@@ -985,7 +1070,8 @@ void pybind_fstext_fstext_utils(py::module &m) {
       "operation of the semiring, it's actual multiplication, which is equivalent "
       "to taking a power in the semiring].",
         py::arg("scale"),
-        py::arg("fst"));
+        py::arg("fst"),
+      py::call_guard<py::gil_scoped_release>());
 
   m.def("EqualAlign",
         &EqualAlign<StdArc>,
@@ -1029,7 +1115,8 @@ void pybind_fstext_fstext_utils(py::module &m) {
         py::arg("fst1"),
         py::arg("fst2"),
         py::arg("phi_label"),
-        py::arg("fst"));
+        py::arg("fst"),
+      py::call_guard<py::gil_scoped_release>());
 
   m.def("PropagateFinal",
         &PropagateFinal<StdArc>,
@@ -1051,7 +1138,8 @@ void pybind_fstext_fstext_utils(py::module &m) {
 "if there are epsilons in your FST; it might be better "
 "to remove those before calling this function.",
         py::arg("phi_label"),
-        py::arg("fst"));
+        py::arg("fst"),
+      py::call_guard<py::gil_scoped_release>());
 
   m.def("RhoCompose",
         &RhoCompose<StdArc>,
@@ -1063,7 +1151,8 @@ void pybind_fstext_fstext_utils(py::module &m) {
         py::arg("fst1"),
         py::arg("fst2"),
         py::arg("rho_label"),
-        py::arg("fst"));
+        py::arg("fst"),
+      py::call_guard<py::gil_scoped_release>());
 
   m.def("IsStochasticFst",
         &IsStochasticFst<StdArc>,
@@ -1113,7 +1202,7 @@ void pybind_fstext_grammar_context_fst(py::module &m) {
   m.def("ComposeContextLeftBiphone",
         &ComposeContextLeftBiphone,
         "This is a variant of the function ComposeContext() which is to be used "
-            "with our \"grammar FST\" framework (see \ref graph_context, i.e. "
+            "with our \"grammar FST\" framework (see \\ref graph_context, i.e. "
             "../doc/grammar.dox, for more details).  This does not take "
             "the 'context_width' and 'central_position' arguments because they are "
             "assumed to be 2 and 1 respectively (meaning, left-biphone phonetic context). "
@@ -1130,9 +1219,9 @@ void pybind_fstext_grammar_context_fst(py::module &m) {
             "@param [in,out] ifst   The FST we are composing with C (e.g. LG.fst). "
             "@param [out] ofst   Composed output FST (would be CLG.fst). "
             "@param [out] ilabels  Vector, indexed by ilabel of CLG.fst, providing information "
-            "                  about the meaning of that ilabel; see \ref tree_ilabel "
+            "                  about the meaning of that ilabel; see \\ref tree_ilabel "
             "                  (http://kaldi-asr.org/doc/tree_externals.html#tree_ilabel) "
-            "                  and also \ref grammar_special_clg "
+            "                  and also \\ref grammar_special_clg "
             "                  (http://kaldi-asr.org/doc/grammar#grammar_special_clg).",
         py::arg("nonterm_phones_offset"),
         py::arg("disambig_syms"),
@@ -1523,42 +1612,18 @@ void pybind_fstext_remove_eps_local(py::module &m) {
 "when cast to LogArc.",
         py::arg("fst"));
 }
-void pybind_fst_types(py::module &m) {
 
-  {
-    using PyClass = VectorFst<StdArc>;
 
-    auto vector_fst = py::class_<PyClass>(
-        m, "VectorFst");
-    vector_fst.def(py::init<>())
-      .def("Start", &PyClass::Start)
-      .def("Final", &PyClass::Final,
-            py::arg("s"))
-      .def("write_to_string", [](const PyClass& f){
-             std::ostringstream os;
-             fst::FstWriteOptions opts;
-             opts.stream_write = true;
-             f.Write(os, opts);
-            return py::bytes(os.str());
-      })
-      .def_static("from_string", [](const std::string &bytes){
-            std::istringstream str(bytes);
 
-            fst::FstHeader hdr;
-            if (!hdr.Read(str, "<unspecified>"))
-            KALDI_ERR << "Reading FST: error reading FST header from "
-                        << kaldi::PrintableRxfilename("<unspecified>");
-              FstReadOptions ropts("<unspecified>", &hdr);
-            VectorFst<StdArc> *f = VectorFst<StdArc>::Read(str, ropts);
-            return f;
-      },
-            py::arg("bytes"),
-           py::return_value_policy::reference);
-  }
+void pybind_fst_symbol_table(py::module& m) {
+  using PyClass = fst::SymbolTable;
+
+  py::class_<PyClass>(m, "SymbolTable")
+      .def(py::init<>());
 }
 
-
 void init_fstext(py::module &_m) {
+  using fst::script::FstClass;
   py::module m = _m.def_submodule("fstext", "fstext pybind for Kaldi");
     pybind_kaldi_fst_io(m);
 
@@ -1569,14 +1634,65 @@ void init_fstext(py::module &_m) {
       m, "CompactLatticeWeight",
       "Contain two members: fst::LatticeWeight and std::vector<int>");
 
+      pybind_fst_impl<StdArc>(m, "VectorFstBase");
+      pybind_expanded_fst_impl<StdArc>(m, "VectorFstExpandedBase");
+      pybind_mutable_fst_impl<StdArc>(m, "VectorMutableFstBase");
+      pybind_vector_fst_impl<StdArc>(m, "VectorFst");
+      pybind_const_fst_impl<StdArc>(m, "ConstFst");
+
   py::class_<TableMatcherOptions>(m, "TableMatcherOptions")
       .def(py::init<>())
       .def_readwrite("table_ratio", &TableMatcherOptions::table_ratio)
       .def_readwrite("min_table_size", &TableMatcherOptions::min_table_size);
 
-    pybind_table_matcher<StdVectorFst>(m);
+  py::class_<CacheOptions>(m, "CacheOptions")
+      .def(py::init<>())
+      .def(py::init<bool , size_t >(),
+                  py::arg("gc"),
+                  py::arg("gc_limit"))
+      .def_readwrite("gc", &CacheOptions::gc)
+      .def_readwrite("gc_limit", &CacheOptions::gc_limit);
+
+  py::class_<ArcMapFstOptions, CacheOptions>(m, "ArcMapFstOptions")
+      .def(py::init<>())
+      .def(py::init<const CacheOptions &>(),
+                  py::arg("opts"));
+
+  py::class_<fst::ArcMapFst<StdArc, LatticeArc, fst::StdToLatticeMapper<BaseFloat> >>(m, "LmMappedFst");
+
+
+    auto table_compose_options = py::class_<TableComposeOptions, TableMatcherOptions>(
+        m, "TableComposeOptions");
+    table_compose_options.def(py::init<>())
+      .def_readwrite("connect", &TableComposeOptions::connect)
+      .def_readwrite("filter_type", &TableComposeOptions::filter_type)
+      .def_readwrite("table_match_type", &TableComposeOptions::table_match_type)
+      .def(py::pickle(
+        [](const TableComposeOptions &p) { // __getstate__
+            /* Return a tuple that fully encodes the state of the object */
+            return py::make_tuple(
+                p.connect,
+                p.filter_type,
+                p.table_match_type);
+        },
+        [](py::tuple t) { // __setstate__
+            if (t.size() != 2)
+                throw std::runtime_error("Invalid state!");
+
+            /* Create a new C++ instance */
+            TableComposeOptions opts;
+
+            /* Assign any additional state */
+            opts.connect = t[0].cast<bool>();
+            opts.filter_type = t[1].cast<ComposeFilter>();
+            opts.table_match_type = t[2].cast<MatchType>();
+
+            return opts;
+        }
+    ));
+
+    pybind_table_matcher<fst::Fst<fst::StdArc>>(m);
     pybind_table_compose<StdArc>(m);
-    pybind_fst_types(m);
     pybind_fstext_deterministic_fst(m);
     pybind_fstext_deterministic_lattice(m);
     pybind_fstext_context_fst(m);
@@ -1590,6 +1706,331 @@ void init_fstext(py::module &_m) {
     pybind_fstext_prune_special(m);
     pybind_fstext_rand_fst(m);
     pybind_fstext_remove_eps_local(m);
+    //pybind_fst_symbol_table(m);
 
   pybind_table_writer<fst::VectorFstHolder>(m, "VectorFstWriter");
+  pybind_sequential_table_reader<fst::VectorFstHolder>(m, "SequentialVectorFstReader");
+  pybind_random_access_table_reader<fst::VectorFstHolder>(m, "RandomAccessVectorFstReader");
+
+
+    m.def("fst_add_self_loops",
+    [](
+      VectorFst<StdArc> *fst,
+      const TransitionModel &trans_model,
+      std::vector<int32> disambig_syms_in,
+    BaseFloat self_loop_scale = 1.0,
+    bool reorder = true
+    ){
+      py::gil_scoped_release gil_release;
+
+    bool check_no_self_loops = true;
+    AddSelfLoops(trans_model,
+                 disambig_syms_in,
+                 self_loop_scale,
+                 reorder, check_no_self_loops, fst);
+    },
+        py::arg("fst"),
+        py::arg("trans_model"),
+        py::arg("disambig_syms_in"),
+        py::arg("self_loop_scale") = 1.0,
+        py::arg("reorder") = true);
+
+    m.def("fst_add_subsequential_loop",
+    [](
+      VectorFst<StdArc> *fst,
+      int32 subseq_sym,
+      float delta = kDelta
+    ){
+
+      py::gil_scoped_release gil_release;
+      int32 h = HighestNumberedInputSymbol(*fst);
+    if (subseq_sym <= h) {
+      std::cerr << "fst_add_subsequential_loop: subseq symbol does not seem right, "<<subseq_sym<<" <= "<<h<<'\n';
+    }
+    AddSubsequentialLoop(subseq_sym, fst);
+    },
+        py::arg("fst"),
+        py::arg("subseq_sym"),
+        py::arg("delta") = kDelta);
+
+    m.def("fst_compose_context",
+    [](
+      VectorFst<StdArc> *fst,
+      std::vector<int32> disambig_in,
+      int32 context_width = 3,
+      int32 central_position = 1,
+    int32 nonterm_phones_offset = -1
+    ){
+      py::gil_scoped_release gil_release;
+
+    std::vector<std::vector<int32> > ilabels;
+    VectorFst<StdArc> composed_fst;
+
+    // Work gets done here (see context-fst.h)
+    if (nonterm_phones_offset < 0) {
+      // The normal case.
+      ComposeContext(disambig_in, context_width, central_position,
+                     fst, &composed_fst, &ilabels);
+    } else {
+      // The grammar-FST case. See ../doc/grammar.dox for an intro.
+      if (context_width != 2 || central_position != 1) {
+        KALDI_ERR << "Grammar-fst graph creation only supports models with left-"
+            "biphone context.  (--nonterm-phones-offset option was supplied).";
+      }
+      ComposeContextLeftBiphone(nonterm_phones_offset,  disambig_in,
+                                *fst, &composed_fst, &ilabels);
+    }
+      std::vector<int32> disambig_out;
+      for (size_t i = 0; i < ilabels.size(); i++)
+            if (ilabels[i].size() == 1 && ilabels[i][0] <= 0)
+            disambig_out.push_back(static_cast<int32>(i));
+      py::gil_scoped_acquire acquire;
+    return py::make_tuple(composed_fst, disambig_out, ilabels);
+    },
+        py::arg("fst"),
+        py::arg("disambig_in"),
+        py::arg("context_width") = 3,
+        py::arg("central_position") = 1,
+        py::arg("nonterm_phones_offset") = -1);
+
+    m.def("fst_determinize_log",
+    [](
+      VectorFst<StdArc> *fst
+    ){
+
+    DeterminizeInLog(fst);
+    },
+        py::arg("fst"));
+
+    m.def("fst_determinize_star",
+    [](
+      VectorFst<StdArc> *fst,
+      float delta = kDelta,
+      int max_states = -1,
+      bool use_log = false
+    ){
+      py::gil_scoped_release gil_release;
+      bool debug_location = false;
+
+      ArcSort(fst, ILabelCompare<StdArc>());  // improves speed.
+      if (use_log) {
+        DeterminizeStarInLog(fst, delta, &debug_location, max_states);
+      } else {
+      VectorFst<StdArc> det_fst;
+        DeterminizeStar(*fst, &det_fst, delta, &debug_location, max_states);
+        *fst = det_fst;
+      }
+      return fst;
+    },
+        py::arg("fst"),
+        py::arg("delta") = kDelta,
+        py::arg("max_states") = -1,
+        py::arg("use_log") = false);
+
+    m.def("fst_is_stochastic",
+    [](
+      Fst<StdArc> *fst,
+    float delta = 0.01,
+    bool test_in_log = true
+    ){
+    bool ans;
+    StdArc::Weight min, max;
+    if (test_in_log)  ans = IsStochasticFstInLog(*fst, delta, &min, &max);
+    else ans = IsStochasticFst(*fst, delta, &min, &max);
+    return py::make_tuple(ans, min, max);
+
+    },
+        py::arg("fst"),
+        py::arg("delta") = 0.01,
+        py::arg("test_in_log") = true);
+
+    m.def("fst_make_context_fst",
+    [](
+      Fst<StdArc> *fst,
+    int32 subseq_sym,
+    std::vector<kaldi::int32> phone_syms,
+    std::vector<int32> disambig_in,
+    int32 context_width = 3, int32 central_position = 1
+    ){
+      py::gil_scoped_release gil_release;
+
+    StdVectorFst loop_fst;
+    loop_fst.AddState();  // Add state zero.
+    loop_fst.SetStart(0);
+    loop_fst.SetFinal(0, TropicalWeight::One());
+    for (size_t i = 0; i < phone_syms.size(); i++) {
+      int32 sym = phone_syms[i];
+      loop_fst.AddArc(0, StdArc(sym, sym, TropicalWeight::One(), 0));
+    }
+
+    std::vector<std::vector<int32> > ilabels;
+    VectorFst<StdArc> context_fst;
+    ComposeContext(disambig_in, context_width, central_position,
+                   &loop_fst, &context_fst, &ilabels, true);
+
+      std::vector<int32> disambig_out;
+      for (size_t i = 0; i < ilabels.size(); i++)
+            if (ilabels[i].size() == 1 && ilabels[i][0] <= 0)
+            disambig_out.push_back(static_cast<int32>(i));
+
+      py::gil_scoped_acquire acquire;
+      return py::make_tuple(context_fst, disambig_out);
+      },
+        py::arg("fst"),
+        py::arg("subseq_sym"),
+        py::arg("phone_syms"),
+        py::arg("disambig_in"),
+        py::arg("context_width") = 3,
+        py::arg("central_position") = 1);
+
+    m.def("fst_make_context_syms",
+    [](
+      fst::SymbolTable *phones_symtab,
+      std::vector<std::vector<kaldi::int32> > ilabel_info,
+        std::string phone_separator = "/",
+        std::string initial_disambig = "#-1"
+    ){
+      py::gil_scoped_release gil_release;
+
+
+    fst::SymbolTable *clg_symtab =
+        CreateILabelInfoSymbolTable(ilabel_info,
+                                    *phones_symtab,
+                                    phone_separator,
+                                    initial_disambig);
+      return clg_symtab;
+    },
+        py::arg("phones_symtab"),
+        py::arg("ilabel_info"),
+        py::arg("phone_separator") = "/",
+        py::arg("initial_disambig") = "#-1");
+
+    m.def("fst_minimize_encoded",
+    [](
+      VectorFst<StdArc> *fst,
+        float delta = kDelta
+    ){
+      py::gil_scoped_release gil_release;
+
+    MinimizeEncoded(fst, delta);
+    },
+        py::arg("fst"),
+        py::arg("delta") = kDelta);
+
+    m.def("fst_phi_compose",
+    [](
+      VectorFst<StdArc> *fst1,
+      VectorFst<StdArc> *fst2,
+        int32 phi_label
+    ){
+      py::gil_scoped_release gil_release;
+
+      PropagateFinal(phi_label, fst2); // makes it work correctly
+      // w.r.t. final-probs.
+
+      VectorFst<StdArc> composed_fst;
+
+      PhiCompose(*fst1, *fst2, phi_label, &composed_fst);
+      return composed_fst;
+    },
+        py::arg("fst1"),
+        py::arg("fst2"),
+        py::arg("phi_label"));
+
+    m.def("fst_push_special",
+      [](
+            VectorFst<StdArc> *fst,
+            BaseFloat delta = kDelta
+      ){
+      py::gil_scoped_release gil_release;
+
+      PushSpecial(fst, delta);
+      },
+        py::arg("fst"),
+        py::arg("delta") = kDelta);
+
+    m.def("fst_arc_sort",
+    [](
+      VectorFst<StdArc> *fst,
+        std::string sort_type = "ilabel"
+    ){
+      py::gil_scoped_release gil_release;
+
+      if (sort_type == "olabel"){
+
+            fst::OLabelCompare<StdArc> olabel_comp;
+            ArcSort(fst, olabel_comp);
+      }
+      else{
+
+            fst::ILabelCompare<StdArc> ilabel_comp;
+            ArcSort(fst, ilabel_comp);
+      }
+    },
+        py::arg("fst"),
+        py::arg("sort_type") = "ilabel");
+
+    m.def("fst_rand",
+    [](
+        RandFstOptions opts
+    ){
+      py::gil_scoped_release gil_release;
+
+    VectorFst <StdArc> *rand_fst = RandFst<StdArc>(opts);
+    return rand_fst;
+    },
+        py::arg("opts"));
+
+    m.def("fst_rm_eps_local",
+    [](
+      VectorFst<StdArc> *fst,
+    bool use_log = false,
+    bool stochastic_in_log = true
+    ){
+      py::gil_scoped_release gil_release;
+
+    if (!use_log && stochastic_in_log) {
+      RemoveEpsLocalSpecial(fst);
+    } else if (use_log) {
+      VectorFst<LogArc> log_fst;
+      Cast(*fst, &log_fst);
+      delete fst;
+      RemoveEpsLocal(&log_fst);
+      fst = new VectorFst<StdArc>;
+      Cast(log_fst, fst);
+    } else {
+      RemoveEpsLocal(fst);
+    }
+    },
+        py::arg("fst"),
+        py::arg("use_log") = false,
+        py::arg("stochastic_in_log") = true);
+
+    m.def("fst_rm_symbols",
+    [](
+      VectorFst<StdArc> *fst,
+      std::vector<int32> disambig_in,
+    bool apply_to_output = false,
+    bool remove_arcs = false,
+    float penalty = -std::numeric_limits<BaseFloat>::infinity()
+    ){
+      py::gil_scoped_release gil_release;
+
+
+    if (apply_to_output) Invert(fst);
+    if (remove_arcs) {
+      RemoveArcsWithSomeInputSymbols(disambig_in, fst);
+    } else if (penalty != -std::numeric_limits<BaseFloat>::infinity()) {
+      PenalizeArcsWithSomeInputSymbols(disambig_in, penalty, fst);
+    } else {
+      RemoveSomeInputSymbols(disambig_in, fst);
+    }
+    if (apply_to_output) Invert(fst);
+    },
+        py::arg("fst"),
+        py::arg("disambig_in"),
+        py::arg("apply_to_output") = false,
+        py::arg("remove_arcs") = false,
+        py::arg("penalty") = -std::numeric_limits<BaseFloat>::infinity());
+
 }
