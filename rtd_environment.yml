@@ -16,4 +16,4 @@ dependencies:
   - myst-parser
   - mock
   - setuptools-scm
-  - kalpy
+  - kalpy =*=cpu*
