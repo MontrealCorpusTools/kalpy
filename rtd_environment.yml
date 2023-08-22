@@ -1,0 +1,19 @@
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.9
+  - numpy
+  - librosa
+  - praatio=6.0.0
+  - dataclassy
+  - pynini
+  - sphinx
+  - numpydoc
+  - sphinx-design
+  - sphinx-click
+  - sphinx-intl
+  - pydata-sphinx-theme
+  - myst-parser
+  - mock
+  - setuptools-scm
+  - kalpy =*=cpu*
