@@ -1,6 +1,7 @@
 """Data classes for GMM"""
 from __future__ import annotations
 
+import os
 import pathlib
 import sys
 import typing
@@ -352,6 +353,8 @@ class AlignmentArchive:
         words_file_name: typing.Union[pathlib.Path, str] = None,
         likelihood_file_name: typing.Union[pathlib.Path, str] = None,
     ):
+        if not os.path.exists(file_name):
+            raise OSError(f"Specified file does not exist: {file_name}")
         self.file_name = str(file_name)
         self.read_specifier = generate_read_specifier(file_name)
 
@@ -510,6 +513,8 @@ class LatticeArchive:
     """
 
     def __init__(self, file_name: typing.Union[pathlib.Path, str], determinized: bool = True):
+        if not os.path.exists(file_name):
+            raise OSError(f"Specified file does not exist: {file_name}")
         self.file_name = str(file_name)
         self.determinized = determinized
         self.read_specifier = generate_read_specifier(file_name)

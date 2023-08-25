@@ -1,6 +1,7 @@
 """Classes for storing and processing features"""
 from __future__ import annotations
 
+import os
 import pathlib
 import typing
 
@@ -35,6 +36,11 @@ class FeatureArchive:
         sliding_cmvn_center_window: bool = True,
         double: bool = False,
     ):
+        self.cmvn_reader = None
+        self.transform_reader = None
+        self.vad_reader = None
+        if not os.path.exists(file_name):
+            raise OSError(f"Specified file does not exist: {file_name}")
         self.archive = MatrixArchive(file_name, double=double)
         self.utt2spk = utt2spk
         self.subsample_n = subsample_n
@@ -52,9 +58,6 @@ class FeatureArchive:
         self.splice_frames = splice_frames
         self.use_deltas = deltas
         self.use_splices = splices
-        self.cmvn_reader = None
-        self.transform_reader = None
-        self.vad_reader = None
         self.cmvn_file_name = cmvn_file_name
         if cmvn_file_name:
             cmvn_read_specifier = generate_read_specifier(cmvn_file_name)
@@ -84,7 +87,7 @@ class FeatureArchive:
         self.close()
 
     def close(self):
-        if self.archive.random_reader.IsOpen():
+        if getattr(self, "archive", None) is not None and self.archive.random_reader.IsOpen():
             self.archive.random_reader.Close()
         if self.cmvn_reader is not None and self.cmvn_reader.IsOpen():
             self.cmvn_reader.Close()

@@ -1,6 +1,7 @@
 """Data classes for GMM"""
 from __future__ import annotations
 
+import os
 import typing
 
 from _kalpy.matrix import FloatVector
@@ -25,6 +26,8 @@ class IvectorArchive:
     """
 
     def __init__(self, file_name: PathLike, num_utterances_file_name: PathLike = None):
+        if not os.path.exists(file_name):
+            raise OSError(f"Specified file does not exist: {file_name}")
         self.file_name = str(file_name)
         self.num_utterances_file_name = num_utterances_file_name
         self.read_specifier = generate_read_specifier(file_name)
@@ -90,6 +93,8 @@ class GselectArchive:
     """
 
     def __init__(self, file_name: PathLike):
+        if not os.path.exists(file_name):
+            raise OSError(f"Specified file does not exist: {file_name}")
         self.file_name = str(file_name)
         self.read_specifier = generate_read_specifier(file_name)
         self.random_reader = RandomAccessInt32VectorVectorReader(self.read_specifier)

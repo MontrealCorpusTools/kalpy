@@ -736,6 +736,54 @@ void pybind_plda(py::module &m) {
         py::arg("ivectors"),
         py::arg("num_examples")
         )
+      .def("score",
+        [](
+            PyClass &plda,
+            const VectorBase<float> & utterance_ivector,
+            const std::vector<Vector<float>> &transformed_enrolled_ivectors,
+            std::vector<int32> num_enroll_utts
+        ){
+          py::gil_scoped_release gil_release;
+          PldaConfig plda_config;
+          Vector<double> ivector_one_dbl(utterance_ivector);
+
+          std::vector<BaseFloat> scores;
+
+          for (int32 j = 0; j < transformed_enrolled_ivectors.size(); j++) {
+            Vector<double> ivector_two_dbl(transformed_enrolled_ivectors[j]);
+            scores.push_back(plda.LogLikelihoodRatio(ivector_one_dbl,
+                                                  num_enroll_utts[j],
+                                                  ivector_two_dbl));
+          }
+          return scores;
+
+        },
+        py::arg("utterance_ivector"),
+        py::arg("transformed_enrolled_ivectors"),
+        py::arg("num_enroll_utts"))
+      .def("score",
+        [](
+            PyClass &plda,
+            const VectorBase<float> & utterance_ivector,
+            const std::vector<Vector<float>> &transformed_enrolled_ivectors
+        ){
+          py::gil_scoped_release gil_release;
+          PldaConfig plda_config;
+          Vector<double> ivector_one_dbl(utterance_ivector);
+
+          std::vector<BaseFloat> scores;
+
+          for (int32 j = 0; j < transformed_enrolled_ivectors.size(); j++) {
+            Vector<double> ivector_two_dbl(transformed_enrolled_ivectors[j]);
+            scores.push_back(plda.LogLikelihoodRatio(ivector_one_dbl,
+                                                  1,
+                                                  ivector_two_dbl));
+          }
+          return scores;
+
+        },
+        py::arg("utterance_ivector"),
+        py::arg("transformed_enrolled_ivectors"))
       .def("TransformIvector",
         py::overload_cast<const PldaConfig &,
                           const VectorBase<double> &,
