@@ -9,7 +9,7 @@ import librosa
 import numpy as np
 
 from _kalpy import feat
-from _kalpy.matrix import CompressedMatrix, FloatMatrixBase
+from _kalpy.matrix import CompressedMatrix, FloatMatrix, FloatVector
 from _kalpy.util import BaseFloatMatrixWriter, CompressedMatrixWriter
 from kalpy.data import Segment
 from kalpy.utils import generate_write_specifier
@@ -170,7 +170,7 @@ class MfccComputer:
 
     def compute_mfccs(
         self,
-        segment: Segment,
+        segment: typing.Union[Segment, np.ndarray],
     ) -> np.ndarray:
         """
         Compute MFCC features for a segment
@@ -188,7 +188,9 @@ class MfccComputer:
         mfccs = self.compute_mfccs_for_export(segment, compress=False)
         return mfccs.numpy()
 
-    def compute_mfccs_for_export(self, segment: Segment, compress: bool = True) -> FloatMatrixBase:
+    def compute_mfccs_for_export(
+        self, segment: typing.Union[Segment, np.ndarray, FloatVector], compress: bool = True
+    ) -> FloatMatrix:
         """
         Generate MFCCs for exporting to a kaldi archive
 
@@ -196,26 +198,34 @@ class MfccComputer:
         ----------
         segment: :class:`~kalpy.feat.mfcc.Segment`
             Acoustic segment to generate MFCCs
+        compress: bool, defaults to True
+            Flag for whether returned matrix should be compressed
 
         Returns
         -------
-        :class:`_kalpy.matrix.FloatMatrixBase`
+        :class:`_kalpy.matrix.FloatMatrix`
             Feature matrix for the segment
         """
-        duration = None
-        if segment.end is not None and segment.begin is not None:
-            duration = segment.end - segment.begin
-        wave, sr = librosa.load(
-            segment.file_path,
-            sr=16000,
-            offset=segment.begin,
-            duration=duration,
-            mono=False,
-        )
-        wave = np.round(wave * 32768)
-        if len(wave.shape) == 2:
-            channel = 0 if segment.channel is None else segment.channel
-            wave = wave[channel, :]
+        if isinstance(segment, Segment):
+            duration = None
+            if segment.end is not None and segment.begin is not None:
+                duration = segment.end - segment.begin
+            wave, sr = librosa.load(
+                segment.file_path,
+                sr=16000,
+                offset=segment.begin,
+                duration=duration,
+                mono=False,
+            )
+            wave = np.round(wave * 32768)
+            if len(wave.shape) == 2:
+                channel = 0 if segment.channel is None else segment.channel
+                wave = wave[channel, :]
+        else:
+            wave = segment
+            if isinstance(wave, np.ndarray) and np.max(wave) < 1.0:
+                wave = np.round(wave * 32768)
+
         mfccs = self.mfcc_obj.compute(wave)
         if compress:
             mfccs = CompressedMatrix(mfccs)

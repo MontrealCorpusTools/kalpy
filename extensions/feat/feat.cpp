@@ -19,7 +19,9 @@ template <class Feature>
 void offline_feature(py::module& m, const std::string& feat_type) {
   py::class_<OfflineFeatureTpl<Feature>>(m, feat_type.c_str())
       .def(py::init<const typename Feature::Options&>())
-      .def("ComputeFeatures", &OfflineFeatureTpl<Feature>::ComputeFeatures)
+      .def("ComputeFeatures",
+      &OfflineFeatureTpl<Feature>::ComputeFeatures,
+      py::call_guard<py::gil_scoped_release>())
       .def("compute", [](
             const OfflineFeatureTpl<Feature>& v,
             py::array_t<float> x
@@ -31,6 +33,16 @@ void offline_feature(py::module& m, const std::string& feat_type) {
         Matrix<float> features;
         for (py::size_t i = 0; i < r.shape(0); i++)
           vector(i) = r(i);
+        v.Compute(vector, vtln_warp, &features);
+        return features;
+      })
+      .def("compute", [](
+            const OfflineFeatureTpl<Feature>& v,
+            const Vector<float> &vector
+            ) -> Matrix<float> {
+          py::gil_scoped_release gil_release;
+        float vtln_warp = 1.0;
+        Matrix<float> features;
         v.Compute(vector, vtln_warp, &features);
         return features;
       })
@@ -46,7 +58,8 @@ void feat_signal(py::module& m){
         "It is suggested to use the FFT-based convolution function which is more "
         "efficient.",
         py::arg("filter"),
-        py::arg("signal"));
+        py::arg("signal"),
+      py::call_guard<py::gil_scoped_release>());
 
   m.def("FFTbasedConvolveSignals",
         &FFTbasedConvolveSignals,
@@ -54,7 +67,8 @@ void feat_signal(py::module& m){
         "However this should be an inefficient version of BlockConvolveSignals() "
         "as it processes the entire signal with a single FFT.",
         py::arg("filter"),
-        py::arg("signal"));
+        py::arg("signal"),
+      py::call_guard<py::gil_scoped_release>());
 
   m.def("FFTbasedBlockConvolveSignals",
         &FFTbasedBlockConvolveSignals,
@@ -62,7 +76,8 @@ void feat_signal(py::module& m){
         "overlap-add method. This is an efficient way to evaluate the discrete "
         "convolution of a long signal with a finite impulse response filter.",
         py::arg("filter"),
-        py::arg("signal"));
+        py::arg("signal"),
+      py::call_guard<py::gil_scoped_release>());
 }
 
 void feat_feat_functions(py::module& m){
@@ -76,7 +91,8 @@ void feat_feat_functions(py::module& m){
         "this function computes in the first (n/2) + 1 elements of it, the "
         "energies of the fft bins from zero to the Nyquist frequency.  Contents of the "
         "remaining (n/2) - 1 elements are undefined at output.",
-        py::arg("complex_fft"));
+        py::arg("complex_fft"),
+      py::call_guard<py::gil_scoped_release>());
 
   py::class_<DeltaFeaturesOptions>(m, "DeltaFeaturesOptions")
       .def(py::init<>())
@@ -97,7 +113,8 @@ void feat_feat_functions(py::module& m){
       .def("Process", &DeltaFeatures::Process,
         py::arg("input_feats"),
         py::arg("frame"),
-        py::arg("output_frame"));
+        py::arg("output_frame"),
+      py::call_guard<py::gil_scoped_release>());
 
   py::class_<ShiftedDeltaFeaturesOptions>(m, "ShiftedDeltaFeaturesOptions")
       .def(py::init<>())
@@ -131,7 +148,8 @@ void feat_feat_functions(py::module& m){
         "features coming in.",
         py::arg("delta_opts"),
         py::arg("input_features"),
-        py::arg("output_features"));
+        py::arg("output_features"),
+      py::call_guard<py::gil_scoped_release>());
 
   m.def("compute_deltas",
         [](
@@ -160,7 +178,8 @@ void feat_feat_functions(py::module& m){
         "convenience, however, ShiftedDeltaFeatures can be used directly.",
         py::arg("delta_opts"),
         py::arg("input_features"),
-        py::arg("output_features"));
+        py::arg("output_features"),
+      py::call_guard<py::gil_scoped_release>());
 
   m.def("SpliceFrames",
         &SpliceFrames,
@@ -175,7 +194,8 @@ void feat_feat_functions(py::module& m){
         py::arg("input_features"),
         py::arg("left_context"),
         py::arg("right_context"),
-        py::arg("output_features"));
+        py::arg("output_features"),
+      py::call_guard<py::gil_scoped_release>());
 
   m.def("splice_frames",
 

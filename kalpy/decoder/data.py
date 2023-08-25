@@ -1,6 +1,7 @@
 """Classes for storing graph archives"""
 from __future__ import annotations
 
+import os.path
 import pathlib
 import typing
 
@@ -19,6 +20,8 @@ class FstArchive:
     """
 
     def __init__(self, file_name: typing.Union[pathlib.Path, str]):
+        if not os.path.exists(file_name):
+            raise OSError(f"Specified file does not exist: {file_name}")
         self.file_name = str(file_name)
         self.read_specifier = generate_read_specifier(file_name)
         self.random_reader = RandomAccessVectorFstReader(self.read_specifier)
