@@ -148,6 +148,7 @@ class LexiconCompiler:
         position_dependent_phones: bool = False,
         ignore_case: bool = True,
         phones: typing.Collection[str] = None,
+        other_silence_phones: typing.Collection[str] = None,
         word_begin_label: str = "#1",
         word_end_label: str = "#2",
     ):
@@ -177,9 +178,14 @@ class LexiconCompiler:
         if self.position_dependent_phones:
             for pos in ["_S", "_B", "_E", "_I"]:
                 self.phone_table.add_symbol(oov_phone + pos)
+        if other_silence_phones:
+            for sp in other_silence_phones:
+                self.phone_table.add_symbol(sp)
+                if self.position_dependent_phones:
+                    for pos in ["_S", "_B", "_E", "_I"]:
+                        self.phone_table.add_symbol(sp + pos)
         if phones is not None:
             for p in sorted(phones):
-                self.phone_table.add_symbol(p)
                 if self.position_dependent_phones:
                     for pos in ["_S", "_B", "_E", "_I"]:
                         self.phone_table.add_symbol(p + pos)
