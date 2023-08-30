@@ -6,7 +6,7 @@ import pathlib
 import typing
 
 from _kalpy.ivector import ComputeVadEnergy, VadEnergyOptions
-from _kalpy.matrix import FloatVector
+from _kalpy.matrix import FloatMatrix, FloatVector
 from _kalpy.util import BaseFloatVectorWriter
 from kalpy.feat.data import FeatureArchive
 from kalpy.utils import generate_write_specifier
@@ -47,8 +47,32 @@ class VadComputer:
         self.proportion_threshold = proportion_threshold
         self.num_done = 0
         self.num_skipped = 0
+        self.options = VadEnergyOptions()
+        self.options.vad_energy_threshold = self.energy_threshold
+        self.options.vad_energy_mean_scale = self.energy_mean_scale
+        self.options.vad_frames_context = self.frames_context
+        self.options.vad_proportion_threshold = self.proportion_threshold
 
     def compute_vad(
+        self,
+        features: FloatMatrix,
+    ) -> FloatVector:
+        """
+        Compute VAD features for a segment
+
+        Parameters
+        ----------
+        features: :class:`~_kalpy.matrix.FloatMatrix`
+            Feature matrix to compute VAD
+
+        Returns
+        -------
+        :class:`~_kalpy.matrix.FloatVector`
+            VAD for each
+        """
+        return ComputeVadEnergy(self.options, features)
+
+    def compute_vads(
         self,
         feature_archive: FeatureArchive,
     ) -> typing.Tuple[str, FloatVector]:
@@ -65,17 +89,12 @@ class VadComputer:
         str, :class:`~_kalpy.matrix.FloatVector`
             VAD for each
         """
-        options = VadEnergyOptions()
-        options.vad_energy_threshold = self.energy_threshold
-        options.vad_energy_mean_scale = self.energy_mean_scale
-        options.vad_frames_context = self.frames_context
-        options.vad_proportion_threshold = self.proportion_threshold
         for utterance_id, feats in feature_archive:
             if feats.NumRows() == 0:
                 logger.debug(f"Skipping {utterance_id} due to empty features.")
                 self.num_skipped += 1
                 continue
-            vad = ComputeVadEnergy(options, feats)
+            vad = self.compute_vad(feats)
             self.num_done += 1
             yield utterance_id, vad
         logger.info(f"Done {self.num_done} utterances, skipped {self.num_skipped}.")
@@ -104,7 +123,7 @@ class VadComputer:
         write_specifier = generate_write_specifier(file_name, write_scp)
         logger.debug(f"Writing to: {write_specifier}")
         writer = BaseFloatVectorWriter(write_specifier)
-        for key, vad in self.compute_vad(feature_archive):
+        for key, vad in self.compute_vads(feature_archive):
             if callback:
                 callback(key)
             writer.Write(str(key), vad)

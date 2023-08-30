@@ -6,6 +6,8 @@ import pathlib
 import typing
 
 import dataclassy
+import librosa
+import numpy as np
 
 from _kalpy.matrix import FloatMatrix
 from _kalpy.util import (
@@ -29,6 +31,26 @@ class Segment:
     begin: typing.Optional[float] = None
     end: typing.Optional[float] = None
     channel: typing.Optional[int] = 0
+
+    @property
+    def wave(self):
+        if getattr(self, "_wave", None) is None:
+            duration = self.end - self.begin
+            self._wave, _ = librosa.load(
+                self.file_path,
+                sr=16000,
+                offset=self.begin,
+                duration=duration,
+                mono=False,
+            )
+            if len(self._wave.shape) > 1:
+                channel = 0 if self.channel is None else self.channel
+                self._wave = self._wave[channel, :]
+        return self._wave
+
+    @property
+    def kaldi_wave(self):
+        return np.round(self.wave * 32768)
 
 
 def make_scp_safe(string: str) -> str:
