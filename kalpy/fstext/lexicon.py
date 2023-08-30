@@ -705,9 +705,8 @@ class LexiconCompiler:
 
         lattice = pynini.compose(phone_fst, phone_to_word)
 
-        try:
-            path_string = pynini.shortestpath(lattice).project("input").string(self.phone_table)
-        except Exception:
+        projection = pynini.shortestpath(lattice).project("input")
+        if projection.start() == pywrapfst.NO_SYMBOL:
             phone_fst.set_input_symbols(self.phone_table)
             phone_fst.set_output_symbols(self.phone_table)
             phone_to_word.set_input_symbols(self.phone_table)
@@ -718,6 +717,7 @@ class LexiconCompiler:
                 phone_fst,
                 phone_to_word,
             )
+        path_string = projection.string(self.phone_table)
         if self.position_dependent_phones:
             path_string = re.sub(r"_[SIBE]\b", "", path_string)
 

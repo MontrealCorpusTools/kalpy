@@ -7,8 +7,7 @@ import typing
 
 from _kalpy.decoder import LatticeFasterDecoder, LatticeFasterDecoderConfig
 from _kalpy.fstext import ConstFst, GetLinearSymbolSequence
-from _kalpy.gmm import AmDiagGmm, DecodableAmDiagGmmScaled, gmm_rescore_lattice
-from _kalpy.hmm import TransitionModel
+from _kalpy.gmm import DecodableAmDiagGmmScaled, gmm_rescore_lattice
 from _kalpy.lat import (
     CompactLattice,
     CompactLatticeWriter,
@@ -18,7 +17,7 @@ from _kalpy.lat import (
     lattice_to_post,
 )
 from _kalpy.matrix import FloatMatrix
-from _kalpy.util import Input, Int32VectorWriter
+from _kalpy.util import Int32VectorWriter
 from kalpy.feat.data import FeatureArchive
 from kalpy.gmm.data import Alignment, LatticeArchive
 from kalpy.gmm.utils import read_gmm_model
