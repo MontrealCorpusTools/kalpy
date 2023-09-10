@@ -100,6 +100,8 @@ void pybind_kaldi_matrix(py::module& m) {
       .def("NumRows", &MatrixBase<float>::NumRows, "Return number of rows")
       .def("NumCols", &MatrixBase<float>::NumCols, "Return number of columns")
       .def("Stride", &MatrixBase<float>::Stride, "Return stride")
+      .def("LogDet", &MatrixBase<float>::LogDet, "Returns logdet of matrix.",
+             py::arg("det_sign") = NULL)
       .def("SetUnit",
             &MatrixBase<float>::SetUnit,
             "Sets to zero, except ones along diagonal [for non-square matrices too]")
@@ -275,6 +277,8 @@ void pybind_kaldi_matrix(py::module& m) {
              py::arg("num_rows"),
              py::arg("col_offset"),
              py::arg("num_cols"))
+      .def("LogDet", &MatrixBase<double>::LogDet, "Returns logdet of matrix.",
+             py::arg("det_sign") = NULL)
       .def("RowRange", &MatrixBase<double>::RowRange,
              py::arg("row_offset"),
              py::arg("num_rows"))

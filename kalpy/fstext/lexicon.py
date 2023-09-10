@@ -13,7 +13,7 @@ import pywrapfst
 
 from _kalpy.fstext import VectorFst
 from _kalpy.lat import WordAlignLatticeLexiconInfo
-from kalpy.exceptions import PhonesToPronunciationsError
+from kalpy.exceptions import LexiconError, PhonesToPronunciationsError
 from kalpy.gmm.data import CtmInterval, HierarchicalCtm, WordCtmInterval
 
 
@@ -267,9 +267,6 @@ class LexiconCompiler:
                 self.phone_table.add_symbol(s)
 
         self.compute_disambiguation_symbols()
-        self.word_table.add_symbol("#0")
-        self.word_table.add_symbol("<s>")
-        self.word_table.add_symbol("</s>")
 
     @property
     def disambiguation_symbols(self) -> typing.List[int]:
@@ -313,7 +310,9 @@ class LexiconCompiler:
             self.phone_table.add_symbol(p)
         if self.disambiguation:
             self.silence_disambiguation_symbol = f"#{self.max_disambiguation_symbol + 1}"
-        return self.pronunciations
+        self.word_table.add_symbol("#0")
+        self.word_table.add_symbol("<s>")
+        self.word_table.add_symbol("</s>")
 
     @property
     def align_lexicon(self):
@@ -498,6 +497,15 @@ class LexiconCompiler:
             fst.set_final(non_silence_state, pywrapfst.Weight.one(fst.weight_type()))
 
         fst.arcsort("olabel")
+        if fst.num_states() == 0 or fst.start() == pywrapfst.NO_STATE_ID:
+            num_words = self.word_table.num_symbols()
+            num_phones = self.phone_table.num_symbols()
+            num_pronunciations = len(self.pronunciations)
+            raise LexiconError(
+                f"There was an error compiling the lexicon "
+                f"({num_words} words, {num_pronunciations} pronunciations, "
+                f"{num_phones} phones)."
+            )
         self._fst = fst
         return self._fst
 

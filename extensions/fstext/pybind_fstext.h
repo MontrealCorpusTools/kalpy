@@ -898,38 +898,23 @@ void pybind_vector_fst_impl(py::module& m, const std::string& class_name,
       .def("Connect", [](PyClass* f){
              fst::Connect<Arc>(f);
       })
-      /*.def("to_pynini", [](PyClass* f){
+       /*.def("to_pynini", [](PyClass& f){
 
         auto pywrapfst_mod = py::module_::import("pywrapfst");
-        if (f->Properties(fst::kMutable, true) == fst::kMutable){
-            MutableFstStruct py_fst;
-            py_fst._mfst = std::shared_ptr<fst::script::MutableFstClass>(reinterpret_cast<fst::script::MutableFstClass*>(f));
-            return py::cast(py_fst);
 
-        }
-        else{
-
-            FstStruct py_fst;
-            py_fst._fst = std::shared_ptr<fst::script::FstClass>(reinterpret_cast<fst::script::FstClass*>(f));
-                return py::cast(py_fst);
-        }
-      })
-      .def_static("from_pynini", [](py::handle fst){
-
-        auto pywrapfst_mod = py::module_::import("pywrapfst");
-        auto ptr = reinterpret_cast<FstStruct*>(fst.ptr());
-        PyClass* f = reinterpret_cast<PyClass*>(ptr->_fst.get());
-            return *f;
-      },
-            py::arg("fst"),
-           py::return_value_policy::reference)*/
+        VectorFstStruct py_fst;
+        fst::script::MutableFstClass vf(f);
+        py_fst.__pyx_base._mfst = std::shared_ptr<fst::script::MutableFstClass>(&vf);
+        return py_fst;
+      }, py::return_value_policy::take_ownership)*/
       .def_static("from_pynini", [](py::object fst) {
         auto pywrapfst_mod = py::module_::import("pywrapfst");
         auto ptr = reinterpret_cast<VectorFstStruct*>(fst.ptr());
-        auto vf = ptr->__pyx_base._mfst->GetFst<A>()->Copy();
-        //PyClass *vf = PyClass();
+        auto mf = ptr->__pyx_base._mfst->GetMutableFst<A>();
+            PyClass *vf = new PyClass(*mf);
             return vf;
-      }, py::return_value_policy::reference)
+      },
+           py::return_value_policy::reference)
       .def("write_to_string", [](const PyClass& f){
              std::ostringstream os;
              fst::FstWriteOptions opts;

@@ -88,7 +88,7 @@ class TrainingGraphCompiler:
             if self.use_g2p:
                 self._fst = self.lexicon_compiler.fst
             else:
-                self._fst = self.lexicon_compiler.kaldi_fst
+                self._fst = self.lexicon_compiler.fst
             disambiguation_symbols = self.lexicon_compiler.disambiguation_symbols
         elif isinstance(lexicon, VectorFst):
             self._fst = lexicon
@@ -135,13 +135,13 @@ class TrainingGraphCompiler:
         if self._compiler is None:
             if self._fst is None:
                 if self.lexicon_compiler is None:
-                    self._fst = VectorFst.Read(str(self.lexicon_path))
+                    self._fst = pynini.Fst.read(str(self.lexicon_path))
                 else:
-                    self._fst = VectorFst.from_pynini(self.lexicon_compiler.fst)
+                    self._fst = self.lexicon_compiler.fst
             self._compiler = _TrainingGraphCompiler(
                 self.transition_model,
                 self.tree,
-                self._fst,
+                VectorFst.from_pynini(self._fst),
                 self.disambiguation_symbols,
                 self.options,
             )
@@ -250,7 +250,7 @@ class TrainingGraphCompiler:
             weight_threshold = pywrapfst.Weight(weight_type, 2.0)
             state_threshold = 256 + 2 * lg_fst.num_states()
             lg_fst = pynini.determinize(lg_fst, nstate=state_threshold, weight=weight_threshold)
-            lg_fst = pynini_to_kaldi(lg_fst)
+            lg_fst = VectorFst.from_pynini(lg_fst)
 
             fst_determinize_star(lg_fst, use_log=True)
             fst_minimize_encoded(lg_fst)

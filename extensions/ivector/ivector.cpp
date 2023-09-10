@@ -5,6 +5,7 @@
 #include "ivector/logistic-regression.h"
 #include "ivector/plda.h"
 #include "ivector/voice-activity-detection.h"
+#include "base/kaldi-math.h"
 
 using namespace kaldi;
 
@@ -653,13 +654,35 @@ void pybind_plda(py::module &m) {
       .def("transform_ivector",
           [](
             PyClass &plda,
-                             const Vector<float> &ivector,
+                             const Vector<double> &ivector,
                              int32 num_examples
           ){
           py::gil_scoped_release gil_release;
           PldaConfig plda_config;
-          Vector<BaseFloat> *transformed_ivector = new Vector<BaseFloat>(plda.Dim());
+          Vector<double> *transformed_ivector = new Vector<double>(plda.Dim());
           plda.TransformIvector(plda_config, ivector,
+                                                      num_examples,
+                                                      transformed_ivector);
+          return transformed_ivector;
+          },
+        py::arg("ivector"),
+        py::arg("num_examples")
+        )
+      .def("transform_ivector",
+          [](
+            PyClass &plda,
+                             py::array_t<double> ivector,
+                             int32 num_examples
+          ){
+          py::gil_scoped_release gil_release;
+          PldaConfig plda_config;
+          Vector<double> *transformed_ivector = new Vector<double>(plda.Dim());
+          Vector<double> ivector_dbl;
+          auto r_one = ivector.unchecked<1>();
+          ivector_dbl.Resize(r_one.shape(0));
+          for (py::size_t i = 0; i < r_one.shape(0); i++)
+            ivector_dbl(i) = r_one(i);
+          plda.TransformIvector(plda_config, ivector_dbl,
                                                       num_examples,
                                                       transformed_ivector);
           return transformed_ivector;
@@ -670,18 +693,54 @@ void pybind_plda(py::module &m) {
       .def("classify_utterance",
       [](
             PyClass &plda,
-            const Vector<float> &utterance_ivector,
-            const std::vector<Vector<float>> &speaker_ivectors,
+            const Vector<double> &utterance_ivector,
+            const std::vector<Vector<double>> &speaker_ivectors,
             const std::vector<int32> &speaker_counts
       ){
           py::gil_scoped_release gil_release;
-        Vector<double> utterance_ivector_dbl(utterance_ivector);
         Vector<float> scores;
         scores.Resize(speaker_counts.size());
         for (int32 i = 0; i < speaker_counts.size(); i++) {
-          Vector<double> speaker_ivector_dbl(speaker_ivectors[i]);
-          scores(i) = plda.LogLikelihoodRatio(speaker_ivector_dbl,
+          scores(i) = plda.LogLikelihoodRatio(speaker_ivectors[i],
                                                 speaker_counts[i],
+                                                utterance_ivector);
+      }
+      int32 index;
+      BaseFloat score = scores.Max(&index);
+      return std::make_pair(index, score);
+      },
+        py::arg("utterance_ivector"),
+        py::arg("speaker_ivectors"),
+        py::arg("speaker_counts")
+      )
+      .def("classify_utterance",
+      [](
+            PyClass &plda,
+            py::array_t<double> utterance_ivector,
+            py::array_t<double> speaker_ivectors,
+            py::array_t<int32> speaker_counts
+      ){
+          py::gil_scoped_release gil_release;
+        Vector<double> utterance_ivector_dbl;
+        auto r_one = utterance_ivector.unchecked<1>();
+        utterance_ivector_dbl.Resize(r_one.shape(0));
+        for (py::size_t i = 0; i < r_one.shape(0); i++)
+          utterance_ivector_dbl(i) = r_one(i);
+
+        Vector<float> scores;
+        auto r_counts = speaker_counts.unchecked<1>();
+        scores.Resize(r_counts.shape(0));
+
+        auto r_speaker = speaker_ivectors.unchecked<2>();
+
+        for (int32 i = 0; i < r_counts.shape(0); i++) {
+          Vector<double> speaker_ivector_dbl;
+          speaker_ivector_dbl.Resize(r_one.shape(0));
+          for (py::size_t j = 0; j < r_one.shape(0); j++)
+            speaker_ivector_dbl(j) = r_speaker(i, j);
+
+          scores(i) = plda.LogLikelihoodRatio(speaker_ivector_dbl,
+                                                r_counts(i),
                                                 utterance_ivector_dbl);
       }
       int32 index;
@@ -695,18 +754,16 @@ void pybind_plda(py::module &m) {
       .def("generate_affinity_matrix",
       [](
             PyClass &plda,
-            const std::vector<Vector<float>> &ivectors
+            const std::vector<Vector<double>> &ivectors
       ){
           py::gil_scoped_release gil_release;
         Matrix<float> scores;
         scores.Resize(ivectors.size(), ivectors.size());
         for (int32 i = 0; i < ivectors.size(); i++) {
-          Vector<double> ivector_one_dbl(ivectors[i]);
           for (int32 j = 0; j < ivectors.size(); j++) {
-            Vector<double> ivector_two_dbl(ivectors[j]);
-            scores(i, j) = plda.LogLikelihoodRatio(ivector_one_dbl,
+            scores(i, j) = plda.LogLikelihoodRatio(ivectors[i],
                                                   1,
-                                                  ivector_two_dbl);
+                                                  ivectors[j]);
           }
         }
       return scores;
@@ -716,16 +773,46 @@ void pybind_plda(py::module &m) {
       .def("transform_ivectors",
           [](
             PyClass &plda,
-            const std::vector<Vector<float>> &ivectors,
+            py::array_t<double> ivectors,
+            py::array_t<int32> num_examples
+          ){
+          py::gil_scoped_release gil_release;
+          PldaConfig plda_config;
+
+        auto r = ivectors.unchecked<2>();
+        auto r_counts = num_examples.unchecked<1>();
+
+          std::vector<const Vector<double> *> transformed_ivectors(r_counts.shape(0));
+
+          for (int32 i = 0; i < r_counts.shape(0); i++) {
+            Vector<double> *transformed_ivector = new Vector<double>(plda.Dim());
+            Vector<double> ivector;
+            ivector.Resize(r.shape(1));
+            for (py::size_t j = 0; j < r.shape(1); j++)
+              ivector(j) = r(i, j);
+            plda.TransformIvector(plda_config, ivector,
+                                                        r_counts(i),
+                                                        transformed_ivector);
+            transformed_ivectors[i] = transformed_ivector;
+          }
+          return transformed_ivectors;
+          },
+        py::arg("ivectors"),
+        py::arg("num_examples")
+        )
+      .def("transform_ivectors",
+          [](
+            PyClass &plda,
+            const std::vector<Vector<double>> &ivectors,
             std::vector<int32> num_examples
           ){
           py::gil_scoped_release gil_release;
           PldaConfig plda_config;
 
-          std::vector<const Vector<BaseFloat> *> transformed_ivectors(ivectors.size());
+          std::vector<const Vector<double> *> transformed_ivectors(ivectors.size());
 
           for (int32 i = 0; i < ivectors.size(); i++) {
-            Vector<BaseFloat> *transformed_ivector = new Vector<BaseFloat>(plda.Dim());
+            Vector<double> *transformed_ivector = new Vector<double>(plda.Dim());
             plda.TransformIvector(plda_config, ivectors[i],
                                                         num_examples[i],
                                                         transformed_ivector);
@@ -739,21 +826,19 @@ void pybind_plda(py::module &m) {
       .def("score",
         [](
             PyClass &plda,
-            const VectorBase<float> & utterance_ivector,
-            const std::vector<Vector<float>> &transformed_enrolled_ivectors,
+            const VectorBase<double> & utterance_ivector,
+            const std::vector<Vector<double>> &transformed_enrolled_ivectors,
             std::vector<int32> num_enroll_utts
         ){
           py::gil_scoped_release gil_release;
           PldaConfig plda_config;
-          Vector<double> ivector_one_dbl(utterance_ivector);
 
           std::vector<BaseFloat> scores;
 
           for (int32 j = 0; j < transformed_enrolled_ivectors.size(); j++) {
-            Vector<double> ivector_two_dbl(transformed_enrolled_ivectors[j]);
-            scores.push_back(plda.LogLikelihoodRatio(ivector_one_dbl,
+            scores.push_back(plda.LogLikelihoodRatio(utterance_ivector,
                                                   num_enroll_utts[j],
-                                                  ivector_two_dbl));
+                                                  transformed_enrolled_ivectors[j]));
           }
           return scores;
 
@@ -761,6 +846,32 @@ void pybind_plda(py::module &m) {
         py::arg("utterance_ivector"),
         py::arg("transformed_enrolled_ivectors"),
         py::arg("num_enroll_utts"))
+      .def("log_likelihood_distance",
+        [](
+            PyClass &plda,
+          py::array_t<double> utterance_one_ivector,
+          py::array_t<double> utterance_two_ivector
+        ){
+          py::gil_scoped_release gil_release;
+          Vector<double> ivector_one_dbl;
+        auto r_one = utterance_one_ivector.unchecked<1>();
+        ivector_one_dbl.Resize(r_one.shape(0));
+        for (py::size_t i = 0; i < r_one.shape(0); i++)
+          ivector_one_dbl(i) = r_one(i);
+
+          Vector<double> ivector_two_dbl;
+        auto r_two = utterance_two_ivector.unchecked<1>();
+        ivector_two_dbl.Resize(r_two.shape(0));
+        for (py::size_t i = 0; i < r_two.shape(0); i++)
+          ivector_two_dbl(i) = r_two(i);
+
+        BaseFloat score = 1.0 / Exp(plda.LogLikelihoodRatio(ivector_one_dbl,
+                                                  1,
+                                                  ivector_two_dbl));
+        return score;
+        },
+        py::arg("utterance_one_ivector"),
+        py::arg("utterance_two_ivector"))
       .def("score",
         [](
             PyClass &plda,
@@ -849,6 +960,64 @@ void pybind_plda(py::module &m) {
         py::arg("num_enroll_utts"),
         py::arg("transformed_test_ivector"),
       py::call_guard<py::gil_scoped_release>())
+      .def("LogLikelihoodRatio",
+        [](
+
+            PyClass &plda,
+            const VectorBase<float> & transformed_enroll_ivector,
+            int32 num_enroll_utts,
+            const VectorBase<float> & transformed_test_ivector
+        ){
+          py::gil_scoped_release gil_release;
+          Vector<double> ivector_one_dbl(transformed_enroll_ivector);
+          Vector<double> ivector_two_dbl(transformed_test_ivector);
+          return plda.LogLikelihoodRatio(ivector_one_dbl, num_enroll_utts, ivector_two_dbl);
+
+        },
+        "Returns the log-likelihood ratio "
+        "log (p(test_ivector | same) / p(test_ivector | different)). "
+        "transformed_enroll_ivector is an average over utterances for "
+        "that speaker.  Both transformed_enroll_vector and transformed_test_ivector "
+        "are assumed to have been transformed by the function TransformIvector(). "
+        "Note: any length normalization will have been done while computing "
+        "the transformed iVectors.",
+        py::arg("transformed_enroll_ivector"),
+        py::arg("num_enroll_utts"),
+        py::arg("transformed_test_ivector"))
+      .def("LogLikelihoodRatio",
+        [](
+
+            PyClass &plda,
+            py::array_t<double> & transformed_enroll_ivector,
+            int32 num_enroll_utts,
+            py::array_t<double> & transformed_test_ivector
+        ){
+          py::gil_scoped_release gil_release;
+          Vector<double> ivector_one_dbl;
+          auto r1 = transformed_enroll_ivector.unchecked<1>();
+          ivector_one_dbl.Resize(r1.shape(0));
+          for (py::size_t i = 0; i < r1.shape(0); i++)
+            ivector_one_dbl(i) = r1(i);
+
+          Vector<double> ivector_two_dbl;
+          auto r2 = transformed_test_ivector.unchecked<1>();
+          ivector_two_dbl.Resize(r2.shape(0));
+          for (py::size_t i = 0; i < r2.shape(0); i++)
+            ivector_two_dbl(i) = r2(i);
+
+          return plda.LogLikelihoodRatio(ivector_one_dbl, num_enroll_utts, ivector_two_dbl);
+
+        },
+        "Returns the log-likelihood ratio "
+        "log (p(test_ivector | same) / p(test_ivector | different)). "
+        "transformed_enroll_ivector is an average over utterances for "
+        "that speaker.  Both transformed_enroll_vector and transformed_test_ivector "
+        "are assumed to have been transformed by the function TransformIvector(). "
+        "Note: any length normalization will have been done while computing "
+        "the transformed iVectors.",
+        py::arg("transformed_enroll_ivector"),
+        py::arg("num_enroll_utts"),
+        py::arg("transformed_test_ivector"))
       .def("SmoothWithinClassCovariance",
         &PyClass::SmoothWithinClassCovariance,
         "This function smooths the within-class covariance by adding to it, "
