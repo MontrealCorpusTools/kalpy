@@ -179,10 +179,11 @@ class LexiconCompiler:
                 self.phone_table.add_symbol(oov_phone + pos)
         if phones is not None:
             for p in sorted(phones):
-                self.phone_table.add_symbol(p)
                 if self.position_dependent_phones:
                     for pos in ["_S", "_B", "_E", "_I"]:
                         self.phone_table.add_symbol(p + pos)
+                else:
+                    self.phone_table.add_symbol(p)
         self.pronunciations: typing.List[Pronunciation] = []
         self._fst = None
         self._kaldi_fst = None
