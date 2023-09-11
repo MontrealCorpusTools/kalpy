@@ -1735,6 +1735,32 @@ void init_fstext(py::module &_m) {
         py::arg("self_loop_scale") = 1.0,
         py::arg("reorder") = true);
 
+    m.def("fst_add_self_loops",
+    [](
+      py::object fst,
+      const TransitionModel &trans_model,
+      std::vector<int32> disambig_syms_in,
+    BaseFloat self_loop_scale = 1.0,
+    bool reorder = true
+    ){
+      py::gil_scoped_release gil_release;
+        auto pywrapfst_mod = py::module_::import("pywrapfst");
+        auto ptr = reinterpret_cast<VectorFstStruct*>(fst.ptr());
+        auto mf = ptr->__pyx_base._mfst->GetMutableFst<StdArc>();
+            VectorFst<StdArc> vf(*mf);
+
+    bool check_no_self_loops = true;
+    AddSelfLoops(trans_model,
+                 disambig_syms_in,
+                 self_loop_scale,
+                 reorder, check_no_self_loops, &vf);
+    },
+        py::arg("fst"),
+        py::arg("trans_model"),
+        py::arg("disambig_syms_in"),
+        py::arg("self_loop_scale") = 1.0,
+        py::arg("reorder") = true);
+
     m.def("fst_add_subsequential_loop",
     [](
       VectorFst<StdArc> *fst,
@@ -1748,6 +1774,28 @@ void init_fstext(py::module &_m) {
       std::cerr << "fst_add_subsequential_loop: subseq symbol does not seem right, "<<subseq_sym<<" <= "<<h<<'\n';
     }
     AddSubsequentialLoop(subseq_sym, fst);
+    },
+        py::arg("fst"),
+        py::arg("subseq_sym"),
+        py::arg("delta") = kDelta);
+
+    m.def("fst_add_subsequential_loop",
+    [](
+      py::object fst,
+      int32 subseq_sym,
+      float delta = kDelta
+    ){
+
+      py::gil_scoped_release gil_release;
+        auto pywrapfst_mod = py::module_::import("pywrapfst");
+        auto ptr = reinterpret_cast<VectorFstStruct*>(fst.ptr());
+        auto mf = ptr->__pyx_base._mfst->GetMutableFst<StdArc>();
+            VectorFst<StdArc> vf(*mf);
+      int32 h = HighestNumberedInputSymbol(vf);
+    if (subseq_sym <= h) {
+      std::cerr << "fst_add_subsequential_loop: subseq symbol does not seem right, "<<subseq_sym<<" <= "<<h<<'\n';
+    }
+    AddSubsequentialLoop(subseq_sym, &vf);
     },
         py::arg("fst"),
         py::arg("subseq_sym"),

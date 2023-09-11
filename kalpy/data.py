@@ -32,20 +32,24 @@ class Segment:
     end: typing.Optional[float] = None
     channel: typing.Optional[int] = 0
 
+    def load_audio(self):
+        duration = self.end - self.begin
+        y, _ = librosa.load(
+            self.file_path,
+            sr=16000,
+            offset=self.begin,
+            duration=duration,
+            mono=False,
+        )
+        if len(y.shape) > 1:
+            channel = 0 if self.channel is None else self.channel
+            y = y[channel, :]
+        return y
+
     @property
     def wave(self):
         if getattr(self, "_wave", None) is None:
-            duration = self.end - self.begin
-            self._wave, _ = librosa.load(
-                self.file_path,
-                sr=16000,
-                offset=self.begin,
-                duration=duration,
-                mono=False,
-            )
-            if len(self._wave.shape) > 1:
-                channel = 0 if self.channel is None else self.channel
-                self._wave = self._wave[channel, :]
+            self._wave = self.load_audio()
         return self._wave
 
     @property

@@ -42,6 +42,10 @@ class CtmError(KalpyError):
         KalpyError.__init__(self, f"Error was encountered in processing CTM interval: {ctm}")
 
 
+class LexiconError(KalpyError):
+    pass
+
+
 class PhonesToPronunciationsError(KalpyError):
     """
     Class for errors in creating pronunciations from phones
