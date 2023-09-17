@@ -144,9 +144,9 @@ class WordCtmInterval:
         end = round(self.end, 6)
         begin = round(self.begin, 6)
         if file_duration is not None and end > file_duration:
-            end = round(file_duration, 6)
+            end = file_duration
         assert begin < end
-        return Interval(round(self.begin, 6), end, self.label)
+        return Interval(begin, end, self.label)
 
 
 @dataclassy.dataclass
@@ -193,6 +193,8 @@ class HierarchicalCtm:
     def to_textgrid_tiers(
         self, file_duration: float = None
     ) -> typing.Tuple[tgio.IntervalTier, tgio.IntervalTier]:
+        if file_duration is not None:
+            file_duration = round(file_duration, 6)
         word_tier = tgio.IntervalTier("words", [], minT=0.0, maxT=file_duration)
         phone_tier = tgio.IntervalTier("phones", [], minT=0.0, maxT=file_duration)
         for w in self.word_intervals:

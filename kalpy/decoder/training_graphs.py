@@ -252,7 +252,7 @@ class TrainingGraphCompiler:
             lg_fst = pynini.determinize(lg_fst, nstate=state_threshold, weight=weight_threshold)
             lg_fst = VectorFst.from_pynini(lg_fst)
 
-            fst_determinize_star(lg_fst, use_log=True)
+            lg_fst = fst_determinize_star(lg_fst, use_log=True)
             fst_minimize_encoded(lg_fst)
             fst_push_special(lg_fst)
             clg_fst, disambig_out, ilabels = fst_compose_context(
