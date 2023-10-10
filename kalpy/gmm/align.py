@@ -83,9 +83,7 @@ class GmmAligner:
         )
         if not successful:
             return None
-        return Alignment(
-            utterance_id, alignment, words, likelihood / len(alignment), per_frame_log_likelihoods
-        )
+        return Alignment(utterance_id, alignment, words, likelihood, per_frame_log_likelihoods)
 
     def align_utterances(
         self, training_graph_archive: FstArchive, feature_archive: FeatureArchive

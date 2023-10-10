@@ -162,6 +162,8 @@ class HierarchicalCtm:
         output_format: str = TextgridFormats.LONG_TEXTGRID,
     ):
         # Create initial textgrid
+        if file_duration is not None:
+            file_duration = round(file_duration, 6)
         tg = tgio.Textgrid()
         tg.minTimestamp = 0
         tg.maxTimestamp = file_duration

@@ -853,6 +853,7 @@ void pybind_plda(py::module &m) {
           py::array_t<double> utterance_two_ivector
         ){
           py::gil_scoped_release gil_release;
+
           Vector<double> ivector_one_dbl;
         auto r_one = utterance_one_ivector.unchecked<1>();
         ivector_one_dbl.Resize(r_one.shape(0));
@@ -869,6 +870,40 @@ void pybind_plda(py::module &m) {
                                                   1,
                                                   ivector_two_dbl));
         return score;
+
+        },
+        py::arg("utterance_one_ivector"),
+        py::arg("utterance_two_ivector"))
+      .def("log_likelihood_distance_vectorized",
+        [](
+            PyClass &plda,
+          py::array_t<double> utterance_one_ivector,
+          py::array_t<double> utterance_two_ivector
+        ){
+          py::gil_scoped_release gil_release;
+        py::buffer_info buf1 = utterance_one_ivector.request(), buf2 = utterance_two_ivector.request();
+
+            auto r_one = utterance_one_ivector.unchecked<2>();
+            auto r_two = utterance_two_ivector.unchecked<2>();
+            auto result = py::array_t<BaseFloat>(r_one.shape(0));
+            py::buffer_info buf3 = result.request();
+            double *ptr3 = static_cast<double *>(buf3.ptr);
+            for (py::size_t i = 0; i < r_one.shape(0); i++){
+            Vector<double> ivector_one_dbl;
+            ivector_one_dbl.Resize(r_one.shape(1));
+            Vector<double> ivector_two_dbl;
+            ivector_two_dbl.Resize(r_two.shape(1));
+            for (py::size_t j = 0; j < r_one.shape(1); j++){
+              ivector_one_dbl(j) = r_one(i, j);
+              ivector_two_dbl(j) = r_two(i, j);
+
+            }
+            ptr3[i] = 1.0 / Exp(plda.LogLikelihoodRatio(ivector_one_dbl,
+                                                    1,
+                                                    ivector_two_dbl));;
+
+            }
+            return result;
         },
         py::arg("utterance_one_ivector"),
         py::arg("utterance_two_ivector"))
