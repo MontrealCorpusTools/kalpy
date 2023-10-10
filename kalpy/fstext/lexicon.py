@@ -361,7 +361,6 @@ class LexiconCompiler:
             final_non_silence_cost = -math.log(self.final_non_silence_correction)
 
         self.phone_table.find(self.silence_disambiguation_symbol)
-        word_eps_symbol = self.word_table.find("<eps>")
         phone_eps_symbol = self.phone_table.find("<eps>")
         self.word_table.find(self.silence_word)
         self._fst = pynini.Fst()
@@ -379,7 +378,7 @@ class LexiconCompiler:
         self._fst.add_arc(
             self.start_state,
             pywrapfst.Arc(
-                self.phone_table.find("<eps>"),
+                phone_eps_symbol,
                 self.word_table.find(self.silence_word),
                 pywrapfst.Weight(self._fst.weight_type(), initial_non_silence_cost),
                 self.non_silence_state,
@@ -388,7 +387,7 @@ class LexiconCompiler:
         self._align_fst.add_arc(
             self.start_state,
             pywrapfst.Arc(
-                self.phone_table.find("<eps>"),
+                phone_eps_symbol,
                 self.word_table.find(self.silence_word),
                 pywrapfst.Weight(self._align_fst.weight_type(), initial_non_silence_cost),
                 self.non_silence_state,
@@ -415,8 +414,6 @@ class LexiconCompiler:
         )
 
         for pron in self.pronunciations:
-            # word_fst = self._create_word_fst(pron, phonological_rule_fst)
-            # word_fsts = pynini.union(word_fsts, word_fst)
             self.add_pronunciation(pron, phonological_rule_fst)
         if final_silence_cost > 0:
             self._fst.set_final(
@@ -594,8 +591,6 @@ class LexiconCompiler:
                 raise Exception(
                     f"The pronunciation '{pronunciation}' had the following phones not in the symbol table: {new_phones}"
                 )
-            if self.disambiguation and pronunciation.disambiguation is not None:
-                phones += [f"#{pronunciation.disambiguation}"]
             pron = " ".join(phones)
             fst = pynini.accep(pron, token_type=self.phone_table)
             if phonological_rule_fst:
@@ -713,6 +708,20 @@ class LexiconCompiler:
                             arc.nextstate + align_start_index,
                         ),
                     )
+
+            if self.disambiguation and pronunciation.disambiguation is not None:
+                self._fst.add_state()
+                self._fst.add_arc(
+                    num_new_states + start_index,
+                    pywrapfst.Arc(
+                        self.phone_table.find(f"#{pronunciation.disambiguation}"),
+                        word_eps_symbol,
+                        pywrapfst.Weight(self._fst.weight_type(), non_silence_following_cost),
+                        num_new_states + start_index + 1,
+                    ),
+                )
+                start_index += 1
+
             # No silence following the pronunciation
             self._fst.add_arc(
                 num_new_states + start_index,
@@ -747,7 +756,7 @@ class LexiconCompiler:
             self._align_fst.add_arc(
                 num_new_states + align_start_index + 1,
                 pywrapfst.Arc(
-                    self.phone_table.find(self.silence_disambiguation_symbol),
+                    phone_eps_symbol,
                     word_eps_symbol,
                     pywrapfst.Weight(self._fst.weight_type(), non_silence_following_cost),
                     self.non_silence_state,
