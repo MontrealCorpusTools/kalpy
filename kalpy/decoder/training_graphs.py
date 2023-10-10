@@ -138,13 +138,14 @@ class TrainingGraphCompiler:
                     self._fst = pynini.Fst.read(str(self.lexicon_path))
                 else:
                     self._fst = self.lexicon_compiler.fst
+            disambiguation_symbols = []
+            if self.lexicon_compiler is not None and self.lexicon_compiler.disambiguation:
+                disambiguation_symbols = self.lexicon_compiler.disambiguation_symbols
             self._compiler = _TrainingGraphCompiler(
                 self.transition_model,
                 self.tree,
                 VectorFst.from_pynini(self._fst),
-                []
-                if not self.lexicon_compiler.disambiguation
-                else self.lexicon_compiler.disambiguation_symbols,
+                disambiguation_symbols,
                 self.options,
             )
         return self._compiler
@@ -329,11 +330,10 @@ class TrainingGraphCompiler:
             lg.optimize()
             lg.arcsort("olabel")
             lg_fst = VectorFst.from_pynini(lg)
-            disambig_syms_in = (
-                []
-                if not self.lexicon_compiler.disambiguation
-                else self.lexicon_compiler.disambiguation_symbols
-            )
+
+            disambig_syms_in = []
+            if self.lexicon_compiler is not None and self.lexicon_compiler.disambiguation:
+                disambig_syms_in = self.lexicon_compiler.disambiguation_symbols
             lg_fst = fst_determinize_star(lg_fst, use_log=True)
             fst_minimize_encoded(lg_fst)
             fst_push_special(lg_fst)
