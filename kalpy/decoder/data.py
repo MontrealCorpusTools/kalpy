@@ -36,8 +36,8 @@ class FstArchive:
         try:
             while not reader.Done():
                 utt = reader.Key()
-                fst = reader.Value()
-                decode_fst = VectorFst(fst)
+                decode_fst = VectorFst(reader.Value())
+                reader.FreeCurrent()
                 yield utt, decode_fst
                 reader.Next()
         finally:

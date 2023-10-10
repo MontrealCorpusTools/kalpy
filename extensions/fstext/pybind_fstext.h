@@ -1132,22 +1132,22 @@ void pybind_const_fst_impl(py::module& m, const std::string& class_name,
       .def("Type", &PyClass::Type, "FST typename",
            py::return_value_policy::reference)
       .def("Copy", &PyClass::Copy,
-           "Get a copy of this VectorFst. See Fst<>::Copy() for further "
+           "Get a copy of this ConstFst. See Fst<>::Copy() for further "
            "doc.",
            py::arg("safe") = false, py::return_value_policy::take_ownership)
       .def_static("Read",
                   // clang-format off
             overload_cast_<std::istream&, const fst::FstReadOptions&>()(&PyClass::Read),
                   // clang-format on
-                  "Reads a VectorFst from an input stream, returning nullptr "
+                  "Reads a ConstFst from an input stream, returning nullptr "
                   "on error.",
                   py::arg("strm"), py::arg("opts"),
                   py::return_value_policy::take_ownership)
       .def_static("Read", overload_cast_<const std::string&>()(&PyClass::Read),
-                  "Read a VectorFst from a file, returning nullptr on error; "
+                  "Read a ConstFst from a file, returning nullptr on error; "
                   "empty "
                   "filename reads from standard input.",
-                  py::arg("filename"), py::return_value_policy::take_ownership)
+                  py::arg("filename"), py::return_value_policy::reference)
       .def("Write",
            // clang-format off
             (bool (PyClass::*)(std::ostream&, const fst::FstWriteOptions&)const)&PyClass::Write,

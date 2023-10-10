@@ -117,16 +117,18 @@ class MlltStatsAccumulator:
             num_done += 1
             tot_like += tot_like_this_file
             tot_t += tot_weight_this_file
-            logger.info(
-                f"Average like for this file is {tot_like_this_file/tot_weight_this_file} "
-                f"over {tot_weight_this_file} frames."
-            )
-            if num_done % 10 == 0:
+            if tot_weight_this_file != 0:
+                logger.info(
+                    f"Average like for this file is {tot_like_this_file/tot_weight_this_file} "
+                    f"over {tot_weight_this_file} frames."
+                )
+            if num_done % 10 == 0 and tot_t != 0:
                 logger.info(f"Average per frame so far is {tot_like/tot_t}")
         logger.info(f"Done {num_done} files.")
-        logger.info(
-            f"Overall avg like per frame (Gaussian only) = {tot_like/tot_t} over {tot_t} frames."
-        )
+        if tot_t != 0:
+            logger.info(
+                f"Overall avg like per frame (Gaussian only) = {tot_like/tot_t} over {tot_t} frames."
+            )
 
     def export_stats(
         self, file_name: str, feature_archive: FeatureArchive, alignment_archive: AlignmentArchive

@@ -142,7 +142,9 @@ class TrainingGraphCompiler:
                 self.transition_model,
                 self.tree,
                 VectorFst.from_pynini(self._fst),
-                self.disambiguation_symbols,
+                []
+                if not self.lexicon_compiler.disambiguation
+                else self.lexicon_compiler.disambiguation_symbols,
                 self.options,
             )
         return self._compiler
@@ -227,7 +229,9 @@ class TrainingGraphCompiler:
         writer.Close()
         logger.info(f"Done {num_done} utterances, errors on {num_error}.")
 
-    def compile_fst(self, transcript: str) -> typing.Optional[VectorFst]:
+    def compile_fst(
+        self, transcript: str, interjection_words: typing.List[str] = None
+    ) -> typing.Optional[VectorFst]:
         """
         Compile a transcript to a training graph
 
@@ -251,13 +255,17 @@ class TrainingGraphCompiler:
             state_threshold = 256 + 2 * lg_fst.num_states()
             lg_fst = pynini.determinize(lg_fst, nstate=state_threshold, weight=weight_threshold)
             lg_fst = VectorFst.from_pynini(lg_fst)
-
+            disambig_syms_in = (
+                []
+                if not self.lexicon_compiler.disambiguation
+                else self.lexicon_compiler.disambiguation_symbols
+            )
             lg_fst = fst_determinize_star(lg_fst, use_log=True)
             fst_minimize_encoded(lg_fst)
             fst_push_special(lg_fst)
             clg_fst, disambig_out, ilabels = fst_compose_context(
                 lg_fst,
-                self.disambiguation_symbols,
+                disambig_syms_in,
                 self.tree.ContextWidth(),
                 self.tree.CentralPosition(),
             )
@@ -273,7 +281,83 @@ class TrainingGraphCompiler:
             fst_rm_symbols(fst, disambig)
             fst_rm_eps_local(fst)
             fst_minimize_encoded(fst)
-            fst_add_self_loops(fst, self.transition_model, [], self.options.self_loop_scale)
+            fst_add_self_loops(
+                fst, self.transition_model, disambig_syms_in, self.options.self_loop_scale
+            )
+        elif interjection_words:
+            g = pynini.Fst()
+            start_state = g.add_state()
+            g.set_start(start_state)
+            for w in transcript.split():
+                word_symbol = self.to_int(w)
+                word_initial_state = g.add_state()
+                for iw in interjection_words:
+                    if not self.lexicon_compiler.word_table.member(iw):
+                        continue
+                    iw_symbol = self.to_int(iw)
+                    g.add_arc(
+                        word_initial_state - 1,
+                        pywrapfst.Arc(
+                            iw_symbol,
+                            iw_symbol,
+                            pywrapfst.Weight(g.weight_type(), 4.0),
+                            word_initial_state,
+                        ),
+                    )
+                word_final_state = g.add_state()
+                g.add_arc(
+                    word_initial_state,
+                    pywrapfst.Arc(
+                        word_symbol,
+                        word_symbol,
+                        pywrapfst.Weight.one(g.weight_type()),
+                        word_final_state,
+                    ),
+                )
+                g.add_arc(
+                    word_initial_state - 1,
+                    pywrapfst.Arc(
+                        word_symbol,
+                        word_symbol,
+                        pywrapfst.Weight.one(g.weight_type()),
+                        word_final_state,
+                    ),
+                )
+            g.set_final(word_final_state, pywrapfst.Weight.one(g.weight_type()))
+
+            lg = pynini.compose(self.lexicon_compiler.fst, g)
+            lg.optimize()
+            lg.arcsort("olabel")
+            lg_fst = VectorFst.from_pynini(lg)
+            disambig_syms_in = (
+                []
+                if not self.lexicon_compiler.disambiguation
+                else self.lexicon_compiler.disambiguation_symbols
+            )
+            lg_fst = fst_determinize_star(lg_fst, use_log=True)
+            fst_minimize_encoded(lg_fst)
+            fst_push_special(lg_fst)
+            clg_fst, disambig_out, ilabels = fst_compose_context(
+                lg_fst,
+                disambig_syms_in,
+                self.tree.ContextWidth(),
+                self.tree.CentralPosition(),
+            )
+            fst_arc_sort(clg_fst, sort_type="ilabel")
+            h, disambig = make_h_transducer(self.tree, self.transition_model, ilabels)
+            fst = fst_table_compose(h, clg_fst)
+            if fst.Start() == pywrapfst.NO_STATE_ID:
+                logger.debug(f"Falling back to pynini compose for '{transcript}")
+                h = kaldi_to_pynini(h)
+                clg_fst = kaldi_to_pynini(clg_fst)
+                fst = pynini_to_kaldi(pynini.compose(h, clg_fst))
+            fst_determinize_star(fst, use_log=True)
+            fst_rm_symbols(fst, disambig)
+            fst_rm_eps_local(fst)
+            fst_minimize_encoded(fst)
+            fst_add_self_loops(
+                fst, self.transition_model, disambig_syms_in, self.options.self_loop_scale
+            )
         else:
             transcript_symbols = [self.to_int(x) for x in transcript.split()]
             fst = self.compiler.CompileGraphFromText(transcript_symbols)

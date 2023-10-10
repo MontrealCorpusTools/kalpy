@@ -1716,6 +1716,14 @@ void pybind_training_graph_compiler(py::module &m) {
                     TrainingGraphCompiler gc(trans_model, ctx_dep, mf, disambig_syms, opts);
                     return gc;
           }))
+          .def(py::init([](const TransitionModel &trans_model, const ContextDependency &ctx_dep,
+                const std::string lex_rxfilename, const std::vector<int32> &disambig_syms,
+                const TrainingGraphCompilerOptions &opts){
+                VectorFst<StdArc> *lex_fst = fst::ReadFstKaldi(lex_rxfilename);
+                    TrainingGraphCompiler *gc = new TrainingGraphCompiler(trans_model, ctx_dep, lex_fst, disambig_syms, opts);
+                    return gc;
+          }),
+           py::return_value_policy::take_ownership)
         .def("CompileGraph",
                &PyClass::CompileGraph,
                "CompileGraph compiles a single training graph its input is a "
@@ -1792,7 +1800,7 @@ void pybind_training_graph_compiler(py::module &m) {
                },
                "This function creates FSTs from the text and calls CompileGraphs.",
                py::arg("transcripts"),
-                  py::return_value_policy::reference);
+                  py::return_value_policy::take_ownership);
         }
 }
 

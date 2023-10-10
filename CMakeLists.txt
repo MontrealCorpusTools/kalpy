@@ -33,17 +33,6 @@ if (MSVC)
     # some warnings related with fst
     add_compile_options(/wd4018 /wd4244 /wd4267 /wd4291 /wd4305)
 
-    set(CompilerFlags
-        CMAKE_CXX_FLAGS
-        CMAKE_CXX_FLAGS_DEBUG
-        CMAKE_CXX_FLAGS_RELEASE
-        CMAKE_C_FLAGS
-        CMAKE_C_FLAGS_DEBUG
-        CMAKE_C_FLAGS_RELEASE
-        )
-    foreach(CompilerFlag ${CompilerFlags})
-      string(REPLACE "/MD" "/MT" ${CompilerFlag} "${${CompilerFlag}}")
-    endforeach()
  elseif(APPLE)
      set(CMAKE_INSTALL_RPATH "@loader_path")
  else()
