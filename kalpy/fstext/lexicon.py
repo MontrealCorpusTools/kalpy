@@ -1002,6 +1002,7 @@ class G2PCompiler(LexiconCompiler):
         self.word_begin_label = "#1"
         self.word_end_label = "#2"
         self.position_dependent_phones = position_dependent_phones
+        self.disambiguation = False
 
     def phones_to_pronunciations(
         self,
