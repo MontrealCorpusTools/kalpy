@@ -104,16 +104,6 @@ void pybind_lm_const_arpa_lm(py::module &m) {
         "ReadInternalOldFormat() to do the actual reading.",
         py::arg("is"), py::arg("binary"),
       py::call_guard<py::gil_scoped_release>())
-      .def_static("read_from_file",
-        [](const std::string &filename){
-          static ConstArpaLm const_arpa;
-        ReadKaldiObject(filename, &const_arpa);
-        return const_arpa;
-        },
-        "Reads the ConstArpaLm format language model. It calls ReadInternal() or "
-        "ReadInternalOldFormat() to do the actual reading.",
-        py::arg("filename"), py::return_value_policy::take_ownership,
-      py::call_guard<py::gil_scoped_release>())
       .def("Write",
         &PyClass::Write,
         "Writes the language model in ConstArpaLm format.",

@@ -746,12 +746,6 @@ void pybind_transition_model(py::module &m) {
            "keeps a copy of the HmmTopology object, but not the "
            "ContextDependency object.",
            py::arg("ctx_dep"), py::arg("hmm_topo"))
-     .def_static("read_from_file", [](std::string file_path) {
-
-               static TransitionModel trans_model;
-               ReadKaldiObject(file_path, &trans_model);
-               return &trans_model;
-          }, py::return_value_policy::reference)
       .def("Read", &PyClass::Read, py::arg("is"), py::arg("binary"),
       py::call_guard<py::gil_scoped_release>())
       .def("Write", &PyClass::Write, py::arg("os"), py::arg("binary"),
