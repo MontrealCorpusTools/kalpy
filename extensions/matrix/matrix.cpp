@@ -134,13 +134,7 @@ void pybind_kaldi_matrix(py::module& m) {
             {sizeof(float) * m->Stride(), sizeof(float)},  // stride in bytes
             m->Data(),                                     // ptr
             obj);  // it will increase the reference count of **this** matrix
-      })
-     .def_static("read_from_file", [](std::string file_path) {
-
-               static Matrix<float> mat;
-               ReadKaldiObject(file_path, &mat);
-               return &mat;
-          }, py::return_value_policy::reference);
+      });
 
   py::class_<Matrix<float>, MatrixBase<float>>(m, "FloatMatrix",
                                                pybind11::buffer_protocol())
@@ -320,13 +314,7 @@ void pybind_kaldi_matrix(py::module& m) {
             {sizeof(double) * m->Stride(), sizeof(double)},  // stride in bytes
             m->Data(),                                     // ptr
             obj);  // it will increase the reference count of **this** matrix
-      })
-     .def_static("read_from_file", [](std::string file_path) {
-
-               static Matrix<double> mat;
-               ReadKaldiObject(file_path, &mat);
-               return &mat;
-          }, py::return_value_policy::reference);
+      });
 
   py::class_<Matrix<double>, MatrixBase<double>>(m, "DoubleMatrix",
                                                pybind11::buffer_protocol())

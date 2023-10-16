@@ -937,7 +937,7 @@ class LexiconCompiler:
             if not text:
                 text = " ".join(actual_words)
         else:
-            actual_words = text.split()
+            actual_words = [x for x in text.split() if x != self.silence_word]
         word_intervals = []
         current_phone_index = 0
         current_word_index = 0
