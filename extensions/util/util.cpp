@@ -1,6 +1,5 @@
 
 #include "util/pybind_util.h"
-#include <pybind11/iostream.h>
 #include "util/kaldi-table.h"
 #include "util/kaldi-io.h"
 #include "util/kaldi-holder-inl.h"

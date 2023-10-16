@@ -22,6 +22,7 @@
 #include "gmm/diag-gmm.h"
 #include "gmm/decodable-am-diag-gmm.h"
 #include "lat/lattice-functions.h"
+#include "fstext/pybind_fstext.h"
 
 using namespace kaldi;
 using namespace fst;

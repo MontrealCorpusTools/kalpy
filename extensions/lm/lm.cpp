@@ -5,6 +5,7 @@
 #include "lm/const-arpa-lm.h"
 #include "lm/kaldi-rnnlm.h"
 #include "lm/mikolov-rnnlm-lib.h"
+#include "fstext/pybind_fstext.h"
 
 using namespace kaldi;
 using namespace fst;

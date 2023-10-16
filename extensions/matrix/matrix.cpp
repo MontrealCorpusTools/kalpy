@@ -6,8 +6,6 @@
 #include "matrix/kaldi-vector.h"
 #include "matrix/matrix-common.h"
 #include "matrix/sparse-matrix.h"
-#include <pybind11/pybind11.h>
-#include "util/pybind_util.h"
 
 using namespace kaldi;
 
