@@ -18,6 +18,8 @@
 #include "fstext/kaldi-fst-io.h"
 #include "fstext/lattice-utils.h"
 #include "fstext/lattice-utils-inl.h"
+#include <fst/extensions/far/far-class.h>
+#include "_pywrapfst.h"
 
 using namespace fst;
 

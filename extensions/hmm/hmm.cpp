@@ -10,7 +10,6 @@
 #include "fstext/table-matcher.h"
 #include "fstext/fstext-utils.h"
 #include "fstext/context-fst.h"
-#include <pybind11/stl_bind.h>
 
 using namespace kaldi;
 using namespace fst;

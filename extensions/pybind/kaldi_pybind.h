@@ -27,18 +27,6 @@
 #include <pybind11/cast.h>
 #include <pybind11/stl.h>
 #include <pybind11/iostream.h>
-#include <mutex>
-#include <iostream>
-#include "fst/vector-fst.h"
-#include "fst/fst.h"
-#include "fst/fstlib.h"
-#include "fst/fst-decl.h"
-#include <fst/script/fst-class.h>
-#include <fst/extensions/far/far-class.h>
-#include "_pywrapfst.h"
-
-
-static std::mutex cout_mutex;
 
 namespace py = pybind11;
 

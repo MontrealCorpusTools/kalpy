@@ -3,6 +3,7 @@
 #define KALPY_PYBIND_MATRIX_H_
 
 #include "pybind/kaldi_pybind.h"
+#include "util/pybind_util.h"
 
 
 void init_matrix(py::module &);

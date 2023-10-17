@@ -15,7 +15,6 @@
 #include "transform/transform-common.h"
 #include "lat/kaldi-lattice.h"
 #include "lat/lattice-functions.h"
-#include <pybind11/stl.h>
 
 
 using namespace kaldi;
