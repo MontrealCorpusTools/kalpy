@@ -159,6 +159,25 @@ void pybind_cmvn(py::module &m) {
      py::arg("uttlist"),
      py::arg("feat_reader"));
 
+  m.def("apply_cmvn",
+        [](
+               const Matrix<BaseFloat> &feats,
+               const Matrix<double> &cmvn_stats,
+                       bool reverse = false,
+                       bool norm_vars = false
+          ){
+          py::gil_scoped_release release;
+      Matrix<BaseFloat> feat_out(feats);
+          if (reverse) {
+            ApplyCmvnReverse(cmvn_stats, norm_vars, &feat_out);
+          } else {
+            ApplyCmvn(cmvn_stats, norm_vars, &feat_out);
+          }
+
+      return feat_out;
+        },
+        py::arg("feats"), py::arg("cmvn_stats"), py::arg("reverse") = false, py::arg("norm_vars") = false);
+
   m.def("ApplyCmvn",
         &ApplyCmvn,
         "Apply cepstral mean and variance normalization to a matrix of features. "
@@ -380,6 +399,8 @@ void pybind_fmllr_diag_gmm(py::module &m) {
                py::arg("feats"))
           .def("accumulate_from_alignment",
                [](PyClass& spk_stats,
+                         const TransitionModel &alignment_trans_model,
+                         const AmDiagGmm &alignment_am_gmm,
                          const TransitionModel &trans_model,
                          const AmDiagGmm &am_gmm,
                          const Matrix<BaseFloat> &feats,
@@ -391,49 +412,51 @@ void pybind_fmllr_diag_gmm(py::module &m) {
                        bool two_models = false
                ){
                     py::gil_scoped_release gil_release;
-                    Posterior pdf_post;
-                    Posterior post;
+                    Posterior posterior;
 
-                    AlignmentToPosterior(ali, &post);
+                    AlignmentToPosterior(ali, &posterior);
+
                     if (distributed)
-                    WeightSilencePostDistributed(trans_model, silence_set,
-                                                  silence_scale, &post);
+                         WeightSilencePostDistributed(alignment_trans_model, silence_set,
+                                                  silence_scale, &posterior);
                     else
-                         WeightSilencePost(trans_model, silence_set,
-                                   silence_scale, &post);
-                         ConvertPosteriorToPdfs(trans_model, post, &pdf_post);
+                         WeightSilencePost(alignment_trans_model, silence_set,
+                                   silence_scale, &posterior);
+
+                    Posterior pdf_posterior;
+                    ConvertPosteriorToPdfs(alignment_trans_model, posterior, &pdf_posterior);
 
                     if (!two_models){
-                         for (size_t i = 0; i < pdf_post.size(); i++) {
-                         for (size_t j = 0; j < pdf_post[i].size(); j++) {
-                              int32 pdf_id = pdf_post[i][j].first;
-                              spk_stats.AccumulateForGmm(am_gmm.GetPdf(pdf_id),
+                         for (size_t i = 0; i < pdf_posterior.size(); i++) {
+                         for (size_t j = 0; j < pdf_posterior[i].size(); j++) {
+                              int32 pdf_id = pdf_posterior[i][j].first;
+                              spk_stats.AccumulateForGmm(alignment_am_gmm.GetPdf(pdf_id),
                                                        feats.Row(i),
-                                                       pdf_post[i][j].second);
+                                                       pdf_posterior[i][j].second);
                          }
                          }
                     }
                     else{
 
 
-                         GaussPost gpost(pdf_post.size());
+                         GaussPost gpost(posterior.size());
                          BaseFloat tot_like_this_file = 0.0, tot_weight = 0.0;
-                         for (size_t i = 0; i < pdf_post.size(); i++) {
-                              gpost[i].reserve(pdf_post[i].size());
-                              for (size_t j = 0; j < pdf_post[i].size(); j++) {
-                              int32 pdf_id = pdf_post[i][j].first;
-                              BaseFloat weight = pdf_post[i][j].second;
-                              const DiagGmm &gmm = am_gmm.GetPdf(pdf_id);
+                         for (size_t i = 0; i < posterior.size(); i++) {
+                              gpost[i].reserve(pdf_posterior[i].size());
+                              for (size_t j = 0; j < pdf_posterior[i].size(); j++) {
+                              int32 pdf_id = pdf_posterior[i][j].first;
+                              BaseFloat weight = pdf_posterior[i][j].second;
+                              const DiagGmm &gmm = alignment_am_gmm.GetPdf(pdf_id);
                               Vector<BaseFloat> this_post_vec;
                               BaseFloat like =
                                    gmm.ComponentPosteriors(feats.Row(i), &this_post_vec);
                               this_post_vec.Scale(weight);
                               if (rand_prune > 0.0)
-                              for (int32 k = 0; k < this_post_vec.Dim(); k++)
-                                   this_post_vec(k) = RandPrune(this_post_vec(k),
-                                                                 rand_prune);
+                                   for (int32 k = 0; k < this_post_vec.Dim(); k++)
+                                        this_post_vec(k) = RandPrune(this_post_vec(k),
+                                                                      rand_prune);
                               if (!this_post_vec.IsZero())
-                              gpost[i].push_back(std::make_pair(pdf_id, this_post_vec));
+                                   gpost[i].push_back(std::make_pair(pdf_id, this_post_vec));
                               tot_like_this_file += like * weight;
                               tot_weight += weight;
                               }
@@ -450,6 +473,8 @@ void pybind_fmllr_diag_gmm(py::module &m) {
                               }
                     }
           },
+               py::arg("alignment_trans_model"),
+               py::arg("alignment_am_gmm"),
                py::arg("trans_model"),
                py::arg("am_gmm"),
                py::arg("feats"),
@@ -461,6 +486,8 @@ void pybind_fmllr_diag_gmm(py::module &m) {
                py::arg("two_models") = false)
           .def("accumulate_from_lattice",
                [](PyClass* spk_stats,
+                         const TransitionModel &alignment_trans_model,
+                         const AmDiagGmm &alignment_am_gmm,
                          const TransitionModel &trans_model,
                          const AmDiagGmm &am_gmm,
                          const Matrix<BaseFloat> &feats,
@@ -490,13 +517,13 @@ void pybind_fmllr_diag_gmm(py::module &m) {
                     Posterior post;
                     double lat_like = LatticeForwardBackward(lat, &post);
                     if (distributed)
-                    WeightSilencePostDistributed(trans_model, silence_set,
+                    WeightSilencePostDistributed(alignment_trans_model, silence_set,
                                                   silence_scale, &post);
                     else
-                    WeightSilencePost(trans_model, silence_set,
+                    WeightSilencePost(alignment_trans_model, silence_set,
                               silence_scale, &post);
                     Posterior pdf_post;
-                    ConvertPosteriorToPdfs(trans_model, post, &pdf_post);
+                    ConvertPosteriorToPdfs(alignment_trans_model, post, &pdf_post);
                     if (!two_models){
                          for (size_t i = 0; i < post.size(); i++) {
                          for (size_t j = 0; j < pdf_post[i].size(); j++) {
@@ -517,7 +544,7 @@ void pybind_fmllr_diag_gmm(py::module &m) {
                               for (size_t j = 0; j < pdf_post[i].size(); j++) {
                               int32 pdf_id = pdf_post[i][j].first;
                               BaseFloat weight = pdf_post[i][j].second;
-                              const DiagGmm &gmm = am_gmm.GetPdf(pdf_id);
+                              const DiagGmm &gmm = alignment_am_gmm.GetPdf(pdf_id);
                               Vector<BaseFloat> this_post_vec;
                               BaseFloat like =
                                    gmm.ComponentPosteriors(feats.Row(i), &this_post_vec);
@@ -542,6 +569,8 @@ void pybind_fmllr_diag_gmm(py::module &m) {
                               }
                     }
           },
+               py::arg("alignment_trans_model"),
+               py::arg("alignment_am_gmm"),
                py::arg("trans_model"),
                py::arg("am_gmm"),
                py::arg("feats"),
@@ -567,13 +596,12 @@ void pybind_fmllr_diag_gmm(py::module &m) {
           .def("compute_transform",
                [](PyClass& f, const AmDiagGmm &am_gmm,
                const FmllrOptions &fmllr_opts){
-                    py::gil_scoped_release gil_release;
                     BaseFloat impr, tot_t;
                     Matrix<BaseFloat> transform(am_gmm.Dim(), am_gmm.Dim()+1);
                     {
                     transform.SetUnit();
                     f.Update(fmllr_opts, &transform, &impr, &tot_t);
-                    return transform;
+                    return py::make_tuple(transform, impr, tot_t);
                     }
                },
                py::arg("am_gmm"),

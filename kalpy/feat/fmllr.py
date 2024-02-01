@@ -6,7 +6,7 @@ import pathlib
 import threading
 import typing
 
-from _kalpy import transform
+from _kalpy import gmm, hmm, transform
 from _kalpy.util import BaseFloatMatrixWriter, ConstIntegerSet
 from kalpy.data import KaldiMapping, MatrixArchive
 from kalpy.feat.data import FeatureArchive
@@ -23,10 +23,10 @@ logger.flush = lambda: None
 class FmllrComputer:
     def __init__(
         self,
+        alignment_acoustic_model_path: typing.Union[pathlib.Path, str],
         acoustic_model_path: typing.Union[pathlib.Path, str],
         silence_phones: typing.List[int],
         spk2utt: KaldiMapping = None,
-        two_models: bool = True,
         weight_distribute: bool = False,
         fmllr_update_type: str = "full",
         silence_weight: float = 0.0,
@@ -36,22 +36,34 @@ class FmllrComputer:
         thread_lock: typing.Optional[threading.Lock] = None,
     ):
         self.acoustic_model_path = acoustic_model_path
+        self.alignment_acoustic_model_path = alignment_acoustic_model_path
         self.transition_model, self.acoustic_model = read_gmm_model(self.acoustic_model_path)
+        self.two_models = self.alignment_acoustic_model_path != self.acoustic_model_path
+        if self.two_models:
+            self.alignment_transition_model, self.alignment_acoustic_model = read_gmm_model(
+                self.alignment_acoustic_model_path
+            )
+        else:
+            self.alignment_transition_model, self.alignment_acoustic_model = (
+                self.transition_model,
+                self.acoustic_model,
+            )
         self.spk2utt = spk2utt
         self.silence_weight = silence_weight
         self.acoustic_scale = acoustic_scale
-        self.two_models = two_models
         self.silence_phones = silence_phones
         self.weight_distribute = weight_distribute
         self.fmllr_update_type = fmllr_update_type
         self.fmllr_min_count = fmllr_min_count
         self.fmllr_num_iters = fmllr_num_iters
         self.thread_lock = thread_lock
+        self.callback_frequency = 100
 
     def compute_fmllr(
         self,
         feature_archive: FeatureArchive,
         alignment_archive: typing.Union[AlignmentArchive, LatticeArchive],
+        callback: typing.Callable = None,
     ):
         fmllr_options = transform.FmllrOptions()
         fmllr_options.update_type = self.fmllr_update_type
@@ -67,19 +79,32 @@ class FmllrComputer:
         silence_set = ConstIntegerSet(self.silence_phones)
         if self.spk2utt is not None:
             for spk, utt_list in self.spk2utt.items():
-                spk_stats = transform.FmllrDiagGmmAccs(am_dim, fmllr_options)
+                spk_stats = transform.FmllrDiagGmmAccs(am_dim)
                 logger.info(f"Processing speaker {spk}...")
                 for utterance_id in utt_list:
                     try:
                         alignment = alignment_archive[utterance_id]
                     except KeyError:
-                        logger.info(f"Skipping {utterance_id} due to missing lattice.")
+                        logger.info(f"Skipping {utterance_id} due to missing alignment.")
+                        num_skipped += 1
                         continue
                     if use_alignment:
                         alignment = alignment_archive[utterance_id].alignment
-                    feats = feature_archive[utterance_id]
+                    try:
+                        feats = feature_archive[utterance_id]
+                    except KeyError:
+                        logger.info(f"Skipping {utterance_id} due to missing features.")
+                        num_skipped += 1
+                        continue
+                    if feats.NumRows() == 0:
+                        logger.warning(f"Skipping {utterance_id} due to zero-length features")
+                        num_skipped += 1
+                        continue
+                    num_done += 1
                     if use_alignment:
                         spk_stats.accumulate_from_alignment(
+                            self.alignment_transition_model,
+                            self.alignment_acoustic_model,
                             self.transition_model,
                             self.acoustic_model,
                             feats,
@@ -92,6 +117,8 @@ class FmllrComputer:
                         )
                     else:
                         spk_stats.accumulate_from_lattice(
+                            self.alignment_transition_model,
+                            self.alignment_acoustic_model,
                             self.transition_model,
                             self.acoustic_model,
                             feats,
@@ -103,16 +130,24 @@ class FmllrComputer:
                             distributed=self.weight_distribute,
                             two_models=self.two_models,
                         )
+                    if callback is not None and num_done % self.callback_frequency == 0:
+                        callback(self.callback_frequency)
                 if self.thread_lock is not None:
                     self.thread_lock.acquire()
-                trans = transform.compute_fmllr_transform(
-                    spk_stats, self.acoustic_model.Dim(), fmllr_options
+                trans, impr, spk_tot_t = spk_stats.compute_transform(
+                    self.acoustic_model, fmllr_options
                 )
                 if self.thread_lock is not None:
                     self.thread_lock.release()
-                num_done += 1
-
-                yield spk, trans
+                if spk_tot_t:
+                    logger.debug(
+                        f"For speaker {spk}, auxf-impr from fMLLR is {impr/spk_tot_t}, over {spk_tot_t} frames."
+                    )
+                    tot_impr += impr
+                    tot_t += spk_tot_t
+                    yield spk, trans
+                else:
+                    logger.debug(f"Skipping speaker {spk} due to no data")
         else:
             for utterance_id, feats in feature_archive:
 
@@ -159,8 +194,12 @@ class FmllrComputer:
                 num_done += 1
 
                 yield utterance_id, trans
-        logger.info(f"Done {num_done} speakers.")
-        logger.info(f"Skipped {num_skipped} speakers.")
+                if callback is not None and num_done % self.callback_frequency == 0:
+                    callback(self.callback_frequency)
+        if callback is not None and num_done % self.callback_frequency:
+            callback(num_done % self.callback_frequency)
+        logger.info(f"Done {num_done} utterances.")
+        logger.info(f"Skipped {num_skipped} utterances.")
         if tot_t:
             logger.info(
                 f"Overall fMLLR auxf impr per frame is {tot_impr / tot_t} over {tot_t} frames."
@@ -181,13 +220,13 @@ class FmllrComputer:
             prev_reader = None
             if previous_transform_archive is not None:
                 prev_reader = previous_transform_archive.random_reader
-            for speaker, trans in self.compute_fmllr(feature_archive, alignment_archive):
-                if callback:
-                    callback(speaker)
+            for speaker, trans in self.compute_fmllr(
+                feature_archive, alignment_archive, callback=callback
+            ):
                 if previous_transform_archive is not None:
                     if prev_reader.HasKey(speaker):
                         prev_trans = prev_reader.Value(speaker)
-                        new_trans = transform.compose_transforms(prev_trans, trans, True)
+                        new_trans = transform.compose_transforms(trans, prev_trans, True)
                         trans = new_trans
                 writer.Write(str(speaker), trans)
         finally:

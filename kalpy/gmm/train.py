@@ -26,7 +26,7 @@ class GmmStatsAccumulator:
         self.gmm_accs = gmm.AccumAmDiagGmm()
         self.transition_model.InitStats(self.transition_accs)
         self.gmm_accs.Init(self.acoustic_model, gmm.kGmmAll)
-        self.num_done = 0
+        self.callback_frequency = 100
 
     def accumulate_stats(
         self,
@@ -36,28 +36,35 @@ class GmmStatsAccumulator:
     ):
         tot_like = 0.0
         tot_t = 0.0
-        for alignment in alignment_archive:
-            feats = feature_archive[alignment.utterance_id]
+        num_done = 0
+        for utterance_id, feats in feature_archive:
             if feats.NumRows() == 0:
-                logger.warning(f"Skipping {alignment.utterance_id} due to zero-length features")
+                logger.warning(f"Skipping {utterance_id} due to zero-length features")
                 continue
-            if callback:
-                callback(alignment.utterance_id)
+            try:
+                alignment = alignment_archive[utterance_id]
+            except KeyError:
+                logger.warning(f"Skipping {utterance_id} due to missing alignment")
+                continue
             tot_like_this_file = self.gmm_accs.acc_stats(
                 self.acoustic_model, self.transition_model, alignment.alignment, feats
             )
             self.transition_model.acc_stats(alignment.alignment, self.transition_accs)
-            self.num_done += 1
+            num_done += 1
             tot_like += tot_like_this_file
             tot_t += len(alignment.alignment)
-            if self.num_done % 50 == 0:
+            if num_done % self.callback_frequency == 0:
+                if callback:
+                    callback(self.callback_frequency)
                 logger.info(
-                    f"Processed {self.num_done} utterances; for utterance "
+                    f"Processed {num_done} utterances; for utterance "
                     f"{alignment.utterance_id} avg. like is "
                     f"{tot_like_this_file/len(alignment.alignment)} "
                     f"over {len(alignment.alignment)} frames."
                 )
-        logger.info(f"Done {self.num_done} files.")
+        if callback is not None and num_done % self.callback_frequency:
+            callback(num_done % self.callback_frequency)
+        logger.info(f"Done {num_done} files.")
         if tot_t:
             logger.info(
                 f"Overall avg like per frame (Gaussian only) = {tot_like/tot_t} over {tot_t} frames."
@@ -99,6 +106,7 @@ class TreeStatsAccumulator:
         if phone_map:
             self.tree_stats_info.ci_phones = phone_map
         self.tree_stats = {}
+        self.callback_frequency = 100
 
     def accumulate_stats(
         self,
@@ -107,13 +115,17 @@ class TreeStatsAccumulator:
         callback: typing.Callable = None,
     ):
         num_done = 0
-        for alignment in alignment_archive:
-            feats = feature_archive[alignment.utterance_id]
+        for utterance_id, feats in feature_archive:
             if feats.NumRows() == 0:
-                logger.warning(f"Skipping {alignment.utterance_id} due to zero-length features")
+                logger.warning(f"Skipping {utterance_id} due to zero-length features")
                 continue
-            if callback:
-                callback(alignment.utterance_id)
+            try:
+                alignment = alignment_archive[utterance_id]
+            except KeyError:
+                logger.warning(f"Skipping {utterance_id} due to missing alignment")
+                continue
+            if callback is not None and num_done % self.callback_frequency == 0:
+                callback(self.callback_frequency)
             stats = hmm.accumulate_tree_stats(
                 self.transition_model, self.tree_stats_info, alignment.alignment, feats
             )
@@ -124,6 +136,8 @@ class TreeStatsAccumulator:
                 else:
                     self.tree_stats[e].Add(c)
             num_done += 1
+        if callback is not None and num_done % self.callback_frequency:
+            callback(num_done % self.callback_frequency)
         logger.info(f"Done {num_done} files.")
 
     def export_stats(
@@ -148,6 +162,7 @@ class TwoFeatsStatsAccumulator:
         self.gmm_accs = gmm.AccumAmDiagGmm()
         self.transition_model.InitStats(self.transition_accs)
         self.gmm_accs.Init(self.acoustic_model, gmm.kGmmAll)
+        self.callback_frequency = 100
 
     def accumulate_stats(
         self,
@@ -158,21 +173,27 @@ class TwoFeatsStatsAccumulator:
     ):
         num_done = 0
         tot_like = 0.0
-        for alignment in alignment_archive:
-            first_feats = first_feature_archive[alignment.utterance_id]
-            second_feats = second_feature_archive[alignment.utterance_id]
+        for (utterance_id, first_feats), (second_utterance_id, second_feats) in zip(
+            first_feature_archive, second_feature_archive
+        ):
+            assert utterance_id == second_utterance_id
             if first_feats.NumRows() == 0:
                 logger.warning(
-                    f"Skipping {alignment.utterance_id} due to zero-length features in first archive"
+                    f"Skipping {utterance_id} due to zero-length features in first archive"
                 )
                 continue
             if second_feats.NumRows() == 0:
                 logger.warning(
-                    f"Skipping {alignment.utterance_id} due to zero-length features in second archive"
+                    f"Skipping {utterance_id} due to zero-length features in second archive"
                 )
                 continue
-            if callback:
-                callback(alignment.utterance_id)
+            try:
+                alignment = alignment_archive[utterance_id]
+            except KeyError:
+                logger.warning(f"Skipping {utterance_id} due to missing alignment")
+                continue
+            if callback is not None and num_done % self.callback_frequency == 0:
+                callback(self.callback_frequency)
             post = hmm.AlignmentToPosterior(alignment.alignment)
             pdf_post = hmm.convert_posterior_to_pdfs(self.transition_model, post)
             tot_like_this_file = self.gmm_accs.acc_twofeats(
@@ -183,6 +204,8 @@ class TwoFeatsStatsAccumulator:
             )
             num_done += 1
             tot_like += tot_like_this_file
+        if callback is not None and num_done % self.callback_frequency:
+            callback(num_done % self.callback_frequency)
         logger.info(f"Done {num_done} files.")
 
     def export_stats(

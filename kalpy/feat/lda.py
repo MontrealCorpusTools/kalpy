@@ -41,10 +41,14 @@ class LdaStatsAccumulator:
         silence_weight = 0.0
         silence_set = ConstIntegerSet(self.silence_phones)
         num_done = 0
-        for alignment in alignment_archive:
-            feats = feature_archive[alignment.utterance_id]
+        for utterance_id, feats in feature_archive:
             if feats.NumRows() == 0:
-                logger.warning(f"Skipping {alignment.utterance_id} due to zero-length features")
+                logger.warning(f"Skipping {utterance_id} due to zero-length features")
+                continue
+            try:
+                alignment = alignment_archive[utterance_id]
+            except KeyError:
+                logger.warning(f"Skipping {utterance_id} due to missing alignment")
                 continue
             if self.lda.Dim() == 0:
                 self.lda.Init(self.transition_model.NumPdfs(), feats.NumCols())
@@ -99,10 +103,14 @@ class MlltStatsAccumulator:
         num_done = 0
         tot_like = 0.0
         tot_t = 0.0
-        for alignment in alignment_archive:
-            feats = feature_archive[alignment.utterance_id]
+        for utterance_id, feats in feature_archive:
             if feats.NumRows() == 0:
-                logger.warning(f"Skipping {alignment.utterance_id} due to zero-length features")
+                logger.warning(f"Skipping {utterance_id} due to zero-length features")
+                continue
+            try:
+                alignment = alignment_archive[utterance_id]
+            except KeyError:
+                logger.warning(f"Skipping {utterance_id} due to missing alignment")
                 continue
             if callback:
                 callback(alignment.utterance_id)

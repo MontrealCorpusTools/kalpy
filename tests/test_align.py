@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 
 from kalpy.data import KaldiMapping
@@ -16,7 +17,7 @@ def test_align(mono_tree_path, mono_model_path, dictionary_path, mono_temp_dir):
     cmvn_file_name = mono_temp_dir.joinpath("cmvn.ark")
     training_graph_archive = FstArchive(mono_temp_dir.joinpath("fsts.ark"))
     utt2spk = KaldiMapping()
-    utt2spk["1"] = "1"
+    utt2spk["1-1"] = "1"
     feature_archive = FeatureArchive(
         mono_temp_dir.joinpath("mfccs.ark"),
         utt2spk=utt2spk,
@@ -25,11 +26,11 @@ def test_align(mono_tree_path, mono_model_path, dictionary_path, mono_temp_dir):
     )
     aligner = GmmAligner(mono_model_path, beam=1000, retry_beam=4000)
     for alignment in aligner.align_utterances(training_graph_archive, feature_archive):
-        assert alignment.utterance_id == "1"
+        assert alignment.utterance_id == "1-1"
         assert len(alignment.alignment) == 2672
         assert alignment.per_frame_likelihoods.numpy().shape[0] == 2672
         ctm = alignment.generate_ctm(aligner.transition_model, lc.phone_table)
-        assert len(ctm) == 242
+        assert len(ctm) == 243
 
 
 @pytest.mark.order(3)
@@ -40,6 +41,9 @@ def test_align_sat_first_pass(
     sat_dictionary_path,
     sat_temp_dir,
     sat_phones,
+    reference_dir,
+    align_options,
+    reference_first_pass_ali_path,
 ):
     lc = LexiconCompiler(position_dependent_phones=False, phones=sat_phones)
     lc.load_pronunciations(sat_dictionary_path)
@@ -50,7 +54,7 @@ def test_align_sat_first_pass(
     training_graph_archive = FstArchive(sat_temp_dir.joinpath("fsts.ark"))
     utt2spk = KaldiMapping()
     textgrid_name = sat_temp_dir.joinpath("first_pass.TextGrid")
-    utt2spk["1"] = "1"
+    utt2spk["1-1"] = "1"
     feature_archive = FeatureArchive(
         sat_temp_dir.joinpath("mfccs.ark"),
         utt2spk=utt2spk,
@@ -58,8 +62,9 @@ def test_align_sat_first_pass(
         lda_mat_file_name=sat_lda_mat_path,
         splices=True,
     )
-    aligner = GmmAligner(sat_align_model_path, beam=10, retry_beam=40)
-    aligner.boost_silence(20.0, lc.silence_symbols)
+
+    aligner = GmmAligner(sat_align_model_path, **align_options)
+    aligner.boost_silence(1.0, lc.silence_symbols)
     aligner.export_alignments(
         alignments_file_name,
         training_graph_archive,
@@ -68,17 +73,30 @@ def test_align_sat_first_pass(
     )
     assert alignments_file_name.exists()
     alignment_archive = AlignmentArchive(alignments_file_name, words_file_name=word_file_name)
-    alignment = alignment_archive["1"]
-    assert len(alignment.alignment) == 2670
+    alignment = alignment_archive["1-1"]
+    assert len(alignment.alignment) == 2672
     intervals = alignment.generate_ctm(aligner.transition_model, lc.phone_table)
     text = " ".join(lc.word_table.find(x) for x in alignment.words)
     ctm = lc.phones_to_pronunciations(text, alignment.words, intervals)
     ctm.export_textgrid(textgrid_name, file_duration=26.72)
+    reference_alignment_archive = AlignmentArchive(reference_first_pass_ali_path)
+    reference_alignment = reference_alignment_archive["1-1"]
+    phone_ctm = alignment.generate_ctm(aligner.transition_model, lc.phone_table)
+    ref_phone_ctm = reference_alignment.generate_ctm(aligner.transition_model, lc.phone_table)
+    assert alignment.alignment == reference_alignment.alignment
+    assert phone_ctm == ref_phone_ctm
 
 
 @pytest.mark.order(5)
 def test_align_sat_second_pass(
-    sat_tree_path, sat_model_path, sat_lda_mat_path, sat_dictionary_path, sat_temp_dir, sat_phones
+    sat_tree_path,
+    sat_model_path,
+    sat_lda_mat_path,
+    sat_dictionary_path,
+    sat_temp_dir,
+    sat_phones,
+    reference_second_pass_ali_path,
+    align_options,
 ):
     lc = LexiconCompiler(position_dependent_phones=False, phones=sat_phones)
     lc.load_pronunciations(sat_dictionary_path)
@@ -89,7 +107,7 @@ def test_align_sat_second_pass(
     alignments_file_name = sat_temp_dir.joinpath("ali_second_pass.ark")
     training_graph_archive = FstArchive(sat_temp_dir.joinpath("fsts.ark"))
     utt2spk = KaldiMapping()
-    utt2spk["1"] = "1"
+    utt2spk["1-1"] = "1"
     feature_archive = FeatureArchive(
         sat_temp_dir.joinpath("mfccs.ark"),
         utt2spk=utt2spk,
@@ -98,8 +116,8 @@ def test_align_sat_second_pass(
         transform_file_name=trans_file_name,
         splices=True,
     )
-    aligner = GmmAligner(sat_model_path, beam=10, retry_beam=40)
-    aligner.boost_silence(20.0, lc.silence_symbols)
+    aligner = GmmAligner(sat_model_path, **align_options)
+    aligner.boost_silence(1.0, lc.silence_symbols)
     aligner.export_alignments(
         alignments_file_name,
         training_graph_archive,
@@ -108,9 +126,16 @@ def test_align_sat_second_pass(
     )
     assert alignments_file_name.exists()
     alignment_archive = AlignmentArchive(alignments_file_name, words_file_name=word_file_name)
-    alignment = alignment_archive["1"]
-    assert len(alignment.alignment) == 2670
+    alignment = alignment_archive["1-1"]
+    assert len(alignment.alignment) == 2672
     intervals = alignment.generate_ctm(aligner.transition_model, lc.phone_table)
     text = " ".join(lc.word_table.find(x) for x in alignment.words)
     ctm = lc.phones_to_pronunciations(text, alignment.words, intervals)
     ctm.export_textgrid(textgrid_name, file_duration=26.72)
+
+    reference_alignment_archive = AlignmentArchive(reference_second_pass_ali_path)
+    reference_alignment = reference_alignment_archive["1-1"]
+    phone_ctm = alignment.generate_ctm(aligner.transition_model, lc.phone_table)
+    ref_phone_ctm = reference_alignment.generate_ctm(aligner.transition_model, lc.phone_table)
+    assert alignment.alignment == reference_alignment.alignment
+    assert phone_ctm == ref_phone_ctm

@@ -192,7 +192,6 @@ class LexiconCompiler:
         self._align_lexicon = None
         self.word_begin_label = word_begin_label
         self.word_end_label = word_end_label
-        self.lock = threading.Lock()
         self.start_state = None
         self.loop_state = None
         self.silence_state = None
@@ -576,202 +575,199 @@ class LexiconCompiler:
     ):
         if (pronunciation.orthography, pronunciation.pronunciation) in self._cached_pronunciations:
             return
-        with self.lock:
-            phones = pronunciation.pronunciation.split()
-            if self.position_dependent_phones:
-                if len(phones) == 1:
-                    phones[0] += "_S"
-                else:
-                    phones[0] += "_B"
-                    phones[-1] += "_E"
-                    for i in range(1, len(phones) - 1):
-                        phones[i] += "_I"
-            new_phones = ", ".join(sorted({x for x in phones if not self.phone_table.member(x)}))
-            if new_phones:
-                raise Exception(
-                    f"The pronunciation '{pronunciation}' had the following phones not in the symbol table: {new_phones}"
-                )
-            pron = " ".join(phones)
-            fst = pynini.accep(pron, token_type=self.phone_table)
-            if phonological_rule_fst:
-                fst = pynini.compose(phonological_rule_fst, fst)
-            fst.rmepsilon()
-            self._cached_pronunciations.add(
-                (pronunciation.orthography, pronunciation.pronunciation)
+        phones = pronunciation.pronunciation.split()
+        if self.position_dependent_phones:
+            if len(phones) == 1:
+                phones[0] += "_S"
+            else:
+                phones[0] += "_B"
+                phones[-1] += "_E"
+                for i in range(1, len(phones) - 1):
+                    phones[i] += "_I"
+        new_phones = ", ".join(sorted({x for x in phones if not self.phone_table.member(x)}))
+        if new_phones:
+            raise Exception(
+                f"The pronunciation '{pronunciation}' had the following phones not in the symbol table: {new_phones}"
             )
-            if not self.word_table.member(pronunciation.orthography):
-                self.word_table.add_symbol(pronunciation.orthography)
-            word_symbol = self.word_table.find(pronunciation.orthography)
-            word_eps_symbol = self.word_table.find("<eps>")
-            phone_eps_symbol = self.phone_table.find("<eps>")
-            silence_before_cost = (
-                -math.log(pronunciation.silence_before_correction)
-                if pronunciation.silence_before_correction
-                else 0.0
-            )
-            non_silence_before_cost = (
-                -math.log(pronunciation.non_silence_before_correction)
-                if pronunciation.non_silence_before_correction
-                else 0.0
-            )
-            silence_following_cost = (
-                -math.log(pronunciation.silence_after_probability)
-                if pronunciation.silence_after_probability
-                else self.base_silence_following_cost
-            )
-            non_silence_following_cost = (
-                -math.log(1 - pronunciation.silence_after_probability)
-                if pronunciation.silence_after_probability
-                else self.base_non_silence_following_cost
-            )
-            probability = pronunciation.probability
-            if probability is None:
-                probability = 1
-            elif probability < 0.01:
-                probability = 0.01  # Dithering to ensure low probability entries
-            pron_cost = abs(math.log(probability))
-            start_index = self._fst.num_states() - 1
-            align_start_index = self._align_fst.num_states()
-            num_new_states = fst.num_states() - 1
-            self._fst.add_states(num_new_states)
-            self._align_fst.add_states(num_new_states + 2)
+        pron = " ".join(phones)
+        fst = pynini.accep(pron, token_type=self.phone_table)
+        if phonological_rule_fst:
+            fst = pynini.compose(phonological_rule_fst, fst)
+        fst.rmepsilon()
+        self._cached_pronunciations.add((pronunciation.orthography, pronunciation.pronunciation))
+        if not self.word_table.member(pronunciation.orthography):
+            self.word_table.add_symbol(pronunciation.orthography)
+        word_symbol = self.word_table.find(pronunciation.orthography)
+        word_eps_symbol = self.word_table.find("<eps>")
+        phone_eps_symbol = self.phone_table.find("<eps>")
+        silence_before_cost = (
+            -math.log(pronunciation.silence_before_correction)
+            if pronunciation.silence_before_correction
+            else 0.0
+        )
+        non_silence_before_cost = (
+            -math.log(pronunciation.non_silence_before_correction)
+            if pronunciation.non_silence_before_correction
+            else 0.0
+        )
+        silence_following_cost = (
+            -math.log(pronunciation.silence_after_probability)
+            if pronunciation.silence_after_probability
+            else self.base_silence_following_cost
+        )
+        non_silence_following_cost = (
+            -math.log(1 - pronunciation.silence_after_probability)
+            if pronunciation.silence_after_probability
+            else self.base_non_silence_following_cost
+        )
+        probability = pronunciation.probability
+        if probability is None:
+            probability = 1
+        elif probability < 0.01:
+            probability = 0.01  # Dithering to ensure low probability entries
+        pron_cost = abs(math.log(probability))
+        start_index = self._fst.num_states() - 1
+        align_start_index = self._align_fst.num_states()
+        num_new_states = fst.num_states() - 1
+        self._fst.add_states(num_new_states)
+        self._align_fst.add_states(num_new_states + 2)
 
-            # FST arcs
-            for state in fst.states():
-                for arc in fst.arcs(state):
-                    if state == fst.start():
-                        # No silence before the pronunciation
-                        self._fst.add_arc(
-                            self.non_silence_state,
-                            pywrapfst.Arc(
-                                arc.ilabel,
-                                word_symbol,
-                                pywrapfst.Weight(
-                                    self._fst.weight_type(), pron_cost + non_silence_before_cost
-                                ),
-                                arc.nextstate + start_index,
+        # FST arcs
+        for state in fst.states():
+            for arc in fst.arcs(state):
+                if state == fst.start():
+                    # No silence before the pronunciation
+                    self._fst.add_arc(
+                        self.non_silence_state,
+                        pywrapfst.Arc(
+                            arc.ilabel,
+                            word_symbol,
+                            pywrapfst.Weight(
+                                self._fst.weight_type(), pron_cost + non_silence_before_cost
                             ),
-                        )
-                        # Silence before the pronunciation
-                        self._fst.add_arc(
-                            self.silence_state,
-                            pywrapfst.Arc(
-                                arc.ilabel,
-                                word_symbol,
-                                pywrapfst.Weight(
-                                    self._fst.weight_type(), pron_cost + silence_before_cost
-                                ),
-                                arc.nextstate + start_index,
+                            arc.nextstate + start_index,
+                        ),
+                    )
+                    # Silence before the pronunciation
+                    self._fst.add_arc(
+                        self.silence_state,
+                        pywrapfst.Arc(
+                            arc.ilabel,
+                            word_symbol,
+                            pywrapfst.Weight(
+                                self._fst.weight_type(), pron_cost + silence_before_cost
                             ),
-                        )
+                            arc.nextstate + start_index,
+                        ),
+                    )
 
-                        # No silence before the pronunciation
-                        self._align_fst.add_arc(
-                            self.non_silence_state,
-                            pywrapfst.Arc(
-                                self.phone_table.find(self.word_begin_label),
-                                word_symbol,
-                                pywrapfst.Weight(
-                                    self._fst.weight_type(), pron_cost + non_silence_before_cost
-                                ),
-                                arc.nextstate + align_start_index - 1,
-                            ),
-                        )
-                        # Silence before the pronunciation
-                        self._align_fst.add_arc(
-                            self.silence_state,
-                            pywrapfst.Arc(
-                                self.phone_table.find(self.word_begin_label),
-                                word_symbol,
-                                pywrapfst.Weight(
-                                    self._fst.weight_type(), pron_cost + silence_before_cost
-                                ),
-                                arc.nextstate + align_start_index - 1,
-                            ),
-                        )
-                    else:
-                        self._fst.add_arc(
-                            state + start_index,
-                            pywrapfst.Arc(
-                                arc.ilabel,
-                                word_eps_symbol,
-                                arc.weight,
-                                arc.nextstate + start_index,
-                            ),
-                        )
+                    # No silence before the pronunciation
                     self._align_fst.add_arc(
-                        state + align_start_index,
+                        self.non_silence_state,
+                        pywrapfst.Arc(
+                            self.phone_table.find(self.word_begin_label),
+                            word_symbol,
+                            pywrapfst.Weight(
+                                self._fst.weight_type(), pron_cost + non_silence_before_cost
+                            ),
+                            arc.nextstate + align_start_index - 1,
+                        ),
+                    )
+                    # Silence before the pronunciation
+                    self._align_fst.add_arc(
+                        self.silence_state,
+                        pywrapfst.Arc(
+                            self.phone_table.find(self.word_begin_label),
+                            word_symbol,
+                            pywrapfst.Weight(
+                                self._fst.weight_type(), pron_cost + silence_before_cost
+                            ),
+                            arc.nextstate + align_start_index - 1,
+                        ),
+                    )
+                else:
+                    self._fst.add_arc(
+                        state + start_index,
                         pywrapfst.Arc(
                             arc.ilabel,
                             word_eps_symbol,
                             arc.weight,
-                            arc.nextstate + align_start_index,
+                            arc.nextstate + start_index,
                         ),
                     )
-
-            if self.disambiguation and pronunciation.disambiguation is not None:
-                self._fst.add_state()
-                self._fst.add_arc(
-                    num_new_states + start_index,
+                self._align_fst.add_arc(
+                    state + align_start_index,
                     pywrapfst.Arc(
-                        self.phone_table.find(f"#{pronunciation.disambiguation}"),
+                        arc.ilabel,
                         word_eps_symbol,
-                        pywrapfst.Weight(self._fst.weight_type(), non_silence_following_cost),
-                        num_new_states + start_index + 1,
+                        arc.weight,
+                        arc.nextstate + align_start_index,
                     ),
                 )
-                start_index += 1
 
-            # No silence following the pronunciation
+        if self.disambiguation and pronunciation.disambiguation is not None:
+            self._fst.add_state()
             self._fst.add_arc(
                 num_new_states + start_index,
                 pywrapfst.Arc(
-                    self.phone_table.find(self.silence_disambiguation_symbol),
+                    self.phone_table.find(f"#{pronunciation.disambiguation}"),
                     word_eps_symbol,
                     pywrapfst.Weight(self._fst.weight_type(), non_silence_following_cost),
-                    self.non_silence_state,
+                    num_new_states + start_index + 1,
                 ),
             )
-            # Silence following the pronunciation
-            self._fst.add_arc(
-                num_new_states + start_index,
-                pywrapfst.Arc(
-                    self.phone_table.find(self.silence_phone),
-                    word_eps_symbol,
-                    pywrapfst.Weight(self._fst.weight_type(), silence_following_cost),
-                    self.silence_state,
-                ),
-            )
-            self._align_fst.add_arc(
-                num_new_states + align_start_index,
-                pywrapfst.Arc(
-                    self.phone_table.find(self.word_end_label),
-                    word_eps_symbol,
-                    pywrapfst.Weight.one(self._align_fst.weight_type()),
-                    num_new_states + align_start_index + 1,
-                ),
-            )
+            start_index += 1
 
-            # No silence following the pronunciation
-            self._align_fst.add_arc(
+        # No silence following the pronunciation
+        self._fst.add_arc(
+            num_new_states + start_index,
+            pywrapfst.Arc(
+                self.phone_table.find(self.silence_disambiguation_symbol),
+                word_eps_symbol,
+                pywrapfst.Weight(self._fst.weight_type(), non_silence_following_cost),
+                self.non_silence_state,
+            ),
+        )
+        # Silence following the pronunciation
+        self._fst.add_arc(
+            num_new_states + start_index,
+            pywrapfst.Arc(
+                self.phone_table.find(self.silence_phone),
+                word_eps_symbol,
+                pywrapfst.Weight(self._fst.weight_type(), silence_following_cost),
+                self.silence_state,
+            ),
+        )
+        self._align_fst.add_arc(
+            num_new_states + align_start_index,
+            pywrapfst.Arc(
+                self.phone_table.find(self.word_end_label),
+                word_eps_symbol,
+                pywrapfst.Weight.one(self._align_fst.weight_type()),
                 num_new_states + align_start_index + 1,
-                pywrapfst.Arc(
-                    phone_eps_symbol,
-                    word_eps_symbol,
-                    pywrapfst.Weight(self._fst.weight_type(), non_silence_following_cost),
-                    self.non_silence_state,
-                ),
-            )
-            # Silence following the pronunciation
-            self._align_fst.add_arc(
-                num_new_states + align_start_index + 1,
-                pywrapfst.Arc(
-                    self.phone_table.find(self.silence_phone),
-                    word_eps_symbol,
-                    pywrapfst.Weight(self._fst.weight_type(), silence_following_cost),
-                    self.silence_state,
-                ),
-            )
+            ),
+        )
+
+        # No silence following the pronunciation
+        self._align_fst.add_arc(
+            num_new_states + align_start_index + 1,
+            pywrapfst.Arc(
+                phone_eps_symbol,
+                word_eps_symbol,
+                pywrapfst.Weight(self._fst.weight_type(), non_silence_following_cost),
+                self.non_silence_state,
+            ),
+        )
+        # Silence following the pronunciation
+        self._align_fst.add_arc(
+            num_new_states + align_start_index + 1,
+            pywrapfst.Arc(
+                self.phone_table.find(self.silence_phone),
+                word_eps_symbol,
+                pywrapfst.Weight(self._fst.weight_type(), silence_following_cost),
+                self.silence_state,
+            ),
+        )
 
     @property
     def kaldi_fst(self) -> VectorFst:

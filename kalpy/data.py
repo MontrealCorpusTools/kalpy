@@ -33,7 +33,9 @@ class Segment:
     channel: typing.Optional[int] = 0
 
     def load_audio(self):
-        duration = self.end - self.begin
+        duration = None
+        if self.end is not None and self.begin is not None:
+            duration = self.end - self.begin
         y, _ = librosa.load(
             self.file_path,
             sr=16000,
