@@ -6,7 +6,7 @@ import pathlib
 import typing
 
 from _kalpy import feat, transform
-from _kalpy.matrix import FloatMatrix
+from _kalpy.matrix import DoubleMatrix, FloatMatrix
 from _kalpy.util import (
     RandomAccessBaseDoubleMatrixReader,
     RandomAccessBaseFloatMatrixReader,
@@ -35,15 +35,19 @@ class FeatureArchive:
         sliding_cmvn_window: int = 300,
         sliding_cmvn_center_window: bool = True,
         double: bool = False,
+        callback: typing.Callable = None,
     ):
         self.cmvn_reader = None
         self.transform_reader = None
         self.vad_reader = None
         if not os.path.exists(file_name):
             raise OSError(f"Specified file does not exist: {file_name}")
+        self.file_name = str(file_name)
         self.archive = MatrixArchive(file_name, double=double)
         self.utt2spk = utt2spk
+        self.double = double
         self.subsample_n = subsample_n
+        self.callback = callback
 
         self.use_sliding_cmvn = use_sliding_cmvn
         self.cmvn_norm_vars = cmvn_norm_vars
@@ -58,12 +62,12 @@ class FeatureArchive:
         self.splice_frames = splice_frames
         self.use_deltas = deltas
         self.use_splices = splices
-        self.cmvn_file_name = cmvn_file_name
+        self.cmvn_read_specifier = None
         if cmvn_file_name:
-            cmvn_read_specifier = generate_read_specifier(cmvn_file_name)
-            self.cmvn_reader = RandomAccessBaseDoubleMatrixReader(cmvn_read_specifier)
+            self.cmvn_read_specifier = generate_read_specifier(cmvn_file_name)
+            self.cmvn_reader = RandomAccessBaseDoubleMatrixReader(self.cmvn_read_specifier)
 
-        self.lda_mat_file_name = lda_mat_file_name
+        self.lda_mat_file_name = None
         self.lda_mat = None
         if lda_mat_file_name:
             self.use_splices = True
@@ -71,14 +75,17 @@ class FeatureArchive:
             self.lda_mat_file_name = str(lda_mat_file_name)
             self.lda_mat = read_kaldi_object(FloatMatrix, self.lda_mat_file_name)
         self.transform_file_name = transform_file_name
+        self.transform_read_specifier = None
         if transform_file_name:
-            transform_read_specifier = generate_read_specifier(transform_file_name)
-            self.transform_reader = RandomAccessBaseFloatMatrixReader(transform_read_specifier)
+            self.transform_read_specifier = generate_read_specifier(transform_file_name)
+            self.transform_reader = RandomAccessBaseFloatMatrixReader(
+                self.transform_read_specifier
+            )
 
-        self.vad_file_name = vad_file_name
+        self.vad_read_specifier = None
         if vad_file_name:
-            vad_read_specifier = generate_read_specifier(vad_file_name)
-            self.vad_reader = RandomAccessBaseFloatVectorReader(vad_read_specifier)
+            self.vad_read_specifier = generate_read_specifier(vad_file_name)
+            self.vad_reader = RandomAccessBaseFloatVectorReader(self.vad_read_specifier)
         self.current_speaker = None
         self.trans = None
         self.cmvn_stats = None
@@ -110,23 +117,27 @@ class FeatureArchive:
                     speaker = self.utt2spk[utt]
                 else:
                     speaker = None
-                # Apply CMVN
-                if self.cmvn_file_name and speaker is not None:
-                    if self.current_speaker != speaker:
+                if self.current_speaker != speaker:
+                    if self.cmvn_reader and speaker is not None:
                         if not self.cmvn_reader.HasKey(speaker):
                             raise Exception(
-                                f"Could not find key {speaker} in {self.cmvn_file_name}"
+                                f"Could not find key {speaker} in {self.cmvn_read_specifier}"
                             )
                         self.cmvn_stats = self.cmvn_reader.Value(speaker)
-                        if self.transform_reader is not None and self.transform_reader.HasKey(
-                            speaker
-                        ):
+                    if self.transform_reader is not None:
+                        if self.transform_reader.HasKey(speaker):
                             self.trans = self.transform_reader.Value(speaker)
-                        self.current_speaker = speaker
-                    if self.cmvn_reverse:
-                        transform.ApplyCmvnReverse(self.cmvn_stats, self.cmvn_norm_vars, feats)
-                    else:
-                        transform.ApplyCmvn(self.cmvn_stats, self.cmvn_norm_vars, feats)
+                        else:
+                            self.trans = None
+                    self.current_speaker = speaker
+                # Apply CMVN
+                if self.cmvn_stats is not None:
+                    feats = transform.apply_cmvn(
+                        feats,
+                        self.cmvn_stats,
+                        reverse=self.cmvn_reverse,
+                        norm_vars=self.cmvn_norm_vars,
+                    )
                 elif self.use_sliding_cmvn:
                     feats = feat.sliding_window_cmn(self.sliding_cmvn_options, feats)
 
@@ -163,19 +174,22 @@ class FeatureArchive:
             speaker = self.utt2spk[item]
         else:
             speaker = None
-        # Apply CMVN
-        if self.cmvn_reader is not None and speaker is not None:
-            if self.current_speaker != speaker:
+        if self.current_speaker != speaker:
+            if self.cmvn_reader and speaker is not None:
                 if not self.cmvn_reader.HasKey(speaker):
-                    raise Exception(f"Could not find key {speaker} in {self.cmvn_file_name}")
+                    raise Exception(f"Could not find key {speaker} in {self.cmvn_read_specifier}")
                 self.cmvn_stats = self.cmvn_reader.Value(speaker)
-                if self.transform_reader is not None and self.transform_reader.HasKey(speaker):
+            if self.transform_reader is not None:
+                if self.transform_reader.HasKey(speaker):
                     self.trans = self.transform_reader.Value(speaker)
-                self.current_speaker = speaker
-            if self.cmvn_reverse:
-                transform.ApplyCmvnReverse(self.cmvn_stats, self.cmvn_norm_vars, feats)
-            else:
-                transform.ApplyCmvn(self.cmvn_stats, self.cmvn_norm_vars, feats)
+                else:
+                    self.trans = None
+            self.current_speaker = speaker
+        # Apply CMVN
+        if self.cmvn_stats is not None:
+            feats = transform.apply_cmvn(
+                feats, self.cmvn_stats, reverse=self.cmvn_reverse, norm_vars=self.cmvn_norm_vars
+            )
         elif self.use_sliding_cmvn:
             feats = feat.sliding_window_cmn(self.sliding_cmvn_options, feats)
 

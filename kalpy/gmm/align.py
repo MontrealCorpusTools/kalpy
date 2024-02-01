@@ -54,10 +54,7 @@ class GmmAligner:
             self.retry_beam = 4 * self.beam
 
     def boost_silence(self, silence_weight: float, silence_phones: typing.List[int]):
-        if silence_weight != 1.0:
-            self.acoustic_model.boost_silence(
-                self.transition_model, silence_phones, silence_weight
-            )
+        self.acoustic_model.boost_silence(self.transition_model, silence_phones, silence_weight)
 
     def align_utterance(
         self, training_graph: VectorFst, features: FloatMatrix, utterance_id: str = None
@@ -83,6 +80,8 @@ class GmmAligner:
         )
         if not successful:
             return None
+        if retried and utterance_id:
+            logger.debug(f"Retried {utterance_id}")
         return Alignment(utterance_id, alignment, words, likelihood, per_frame_log_likelihoods)
 
     def align_utterances(
@@ -93,20 +92,18 @@ class GmmAligner:
         num_error = 0
         total_frames = 0
         total_likelihood = 0
-        for utterance_id, training_graph in training_graph_archive:
-            try:
-                feats = feature_archive[utterance_id]
-            except KeyError:
-                logger.warning(f"Skipping {utterance_id} not in feature archive.")
-                num_error += 1
-                continue
-
+        for utterance_id, feats in feature_archive:
             if feats.NumRows() == 0:
                 logger.warning(f"Skipping {utterance_id} due to zero-length features")
-                num_error += 1
+                continue
+            try:
+                training_graph = training_graph_archive[utterance_id]
+            except KeyError:
+                logger.warning(f"Skipping {utterance_id} due to missing training graph")
                 continue
             alignment = self.align_utterance(training_graph, feats, utterance_id)
             if alignment is None:
+                yield utterance_id, None
                 num_error += 1
                 continue
             yield alignment
@@ -142,6 +139,10 @@ class GmmAligner:
         try:
             for alignment in self.align_utterances(training_graph_archive, feature_archive):
                 if alignment is None:
+                    continue
+                if isinstance(alignment, tuple):
+                    if callback:
+                        callback(alignment)
                     continue
                 if callback:
                     callback((alignment.utterance_id, alignment.likelihood))

@@ -90,13 +90,26 @@ class CmvnComputer:
 
         Returns
         -------
-        :class:`_kalpy.matrix.FloatMatrixBase`
+        :class:`_kalpy.matrix.DoubleMatrix`
             Feature matrix for the segment
         """
-        cmvn, num_done, num_error = transform.calculate_cmvn(utterance_list, feature_reader)
+        if False:
+            cmvn_stats = DoubleMatrix()
+            is_init = False
+            num_done = 0
+            num_error = 0
+            for utt in utterance_list:
+                print(utt)
+                feats = feature_reader.Value(utt)
+                if not is_init:
+                    transform.InitCmvnStats(feats.NumCols(), cmvn_stats)
+                    is_init = True
+                transform.AccCmvnStats(feats, None, cmvn_stats)
+                num_done += 1
+        cmvn_stats, num_done, num_error = transform.calculate_cmvn(utterance_list, feature_reader)
         self.num_done += num_done
         self.num_error += num_error
-        return cmvn
+        return cmvn_stats
 
     def export_cmvn(
         self,

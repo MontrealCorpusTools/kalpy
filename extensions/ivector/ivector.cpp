@@ -499,6 +499,29 @@ void pybind_ivector_extractor(py::module &m) {
         py::arg("opts"),
         py::arg("extractor"),
       py::call_guard<py::gil_scoped_release>())
+      .def(py::pickle(
+        [](const PyClass &p) { // __getstate__
+            /* Return a tuple that fully encodes the state of the object */
+             std::ostringstream os;
+             bool binary = true;
+             p.Write(os, binary);
+            return py::make_tuple(
+                    py::bytes(os.str()));
+        },
+        [](py::tuple t) { // __setstate__
+            if (t.size() != 1)
+                throw std::runtime_error("Invalid state!");
+
+            /* Create a new C++ instance */
+            PyClass *p = new PyClass();
+
+            /* Assign any additional state */
+            std::istringstream str(t[0].cast<std::string>());
+               p->Read(str, true);
+
+            return p;
+        }
+    ))
       .def("update", [](
         PyClass &stats,
         IvectorExtractor &extractor,
@@ -930,6 +953,29 @@ void pybind_plda(py::module &m) {
         },
         py::arg("utterance_ivector"),
         py::arg("transformed_enrolled_ivectors"))
+      .def(py::pickle(
+        [](const PyClass &p) { // __getstate__
+            /* Return a tuple that fully encodes the state of the object */
+             std::ostringstream os;
+             bool binary = true;
+             p.Write(os, binary);
+            return py::make_tuple(
+                    py::bytes(os.str()));
+        },
+        [](py::tuple t) { // __setstate__
+            if (t.size() != 1)
+                throw std::runtime_error("Invalid state!");
+
+            /* Create a new C++ instance */
+            PyClass *p = new PyClass();
+
+            /* Assign any additional state */
+            std::istringstream str(t[0].cast<std::string>());
+               p->Read(str, true);
+
+            return p;
+        }
+    ))
       .def("TransformIvector",
         py::overload_cast<const PldaConfig &,
                           const VectorBase<double> &,
@@ -1356,6 +1402,22 @@ void init_ivector(py::module &_m) {
           py::gil_scoped_release gil_release;
       BaseFloat norm = ivector->Norm(2.0);
       BaseFloat ratio = norm / sqrt(ivector->Dim());
+      if (!scaleup) ratio = norm;
+      if (normalize) ivector->Scale(1.0 / ratio);
+    },
+        py::arg("ivector"),
+        py::arg("normalize") = true,
+        py::arg("scaleup") = true);
+
+  m.def("ivector_normalize_length",
+    [](
+    Vector<double>* ivector,
+      bool normalize = true,
+      bool scaleup = true
+    ) {
+          py::gil_scoped_release gil_release;
+      double norm = ivector->Norm(2.0);
+      double ratio = norm / sqrt(ivector->Dim());
       if (!scaleup) ratio = norm;
       if (normalize) ivector->Scale(1.0 / ratio);
     },

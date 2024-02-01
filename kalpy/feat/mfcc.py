@@ -88,9 +88,9 @@ class MfccComputer:
         window_type: str = "povey",
         round_to_power_of_two: bool = True,
         blackman_coeff: float = 0.42,
-        snip_edges: bool = True,
+        snip_edges: bool = False,
         max_feature_vectors: int = -1,
-        num_mel_bins: int = 25,
+        num_mel_bins: int = 23,
         low_frequency: float = 20,
         high_frequency: float = 7800,
         vtln_low: float = 100,
@@ -128,6 +128,35 @@ class MfccComputer:
         self.use_energy = use_energy
         self.raw_energy = raw_energy
         self.htk_compatibility = htk_compatibility
+
+    @property
+    def parameters(self):
+        return {
+            "sample_frequency": self.sample_frequency,
+            "frame_length": self.frame_length,
+            "frame_shift": self._frame_shift,
+            "dither": self.dither,
+            "preemphasis_coefficient": self.preemphasis_coefficient,
+            "remove_dc_offset": self.remove_dc_offset,
+            "window_type": self.window_type,
+            "round_to_power_of_two": self.round_to_power_of_two,
+            "blackman_coeff": self.blackman_coeff,
+            "snip_edges": self.snip_edges,
+            "max_feature_vectors": self.max_feature_vectors,
+            "num_mel_bins": self.num_mel_bins,
+            "low_frequency": self.low_frequency,
+            "high_frequency": self.high_frequency,
+            "vtln_low": self.vtln_low,
+            "vtln_high": self.vtln_high,
+            "num_coefficients": self.num_coefficients,
+            "use_energy": self.use_energy,
+            "energy_floor": self.energy_floor,
+            "raw_energy": self.raw_energy,
+            "cepstral_lifter": self.cepstral_lifter,
+            "htk_compatibility": self.htk_compatibility,
+            "allow_downsample": self.allow_downsample,
+            "allow_upsample": self.allow_upsample,
+        }
 
     @property
     def frame_shift(self):
@@ -207,24 +236,11 @@ class MfccComputer:
             Feature matrix for the segment
         """
         if isinstance(segment, Segment):
-            duration = None
-            if segment.end is not None and segment.begin is not None:
-                duration = segment.end - segment.begin
-            wave, sr = librosa.load(
-                segment.file_path,
-                sr=16000,
-                offset=segment.begin,
-                duration=duration,
-                mono=False,
-            )
-            wave = np.round(wave * 32768)
-            if len(wave.shape) == 2:
-                channel = 0 if segment.channel is None else segment.channel
-                wave = wave[channel, :]
+            wave = segment.kaldi_wave
         else:
             wave = segment
             if isinstance(wave, np.ndarray) and np.max(wave) < 1.0:
-                wave = np.round(wave * 32768)
+                wave = wave * 32768
 
         mfccs = self.mfcc_obj.compute(wave)
         if compress:

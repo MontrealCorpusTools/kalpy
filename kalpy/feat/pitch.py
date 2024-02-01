@@ -133,7 +133,7 @@ class PitchComputer:
         frames_per_chunk: int = 0,
         simulate_first_pass_online: bool = False,
         recompute_frame: int = 500,
-        snip_edges: bool = True,
+        snip_edges: bool = False,
         pitch_scale: float = 2.0,
         pov_scale: float = 2.0,
         pov_offset: float = 0.0,
@@ -182,6 +182,42 @@ class PitchComputer:
         self.process_opts.add_normalized_log_pitch = add_normalized_log_pitch
         self.process_opts.add_delta_pitch = add_delta_pitch
         self.process_opts.add_raw_log_pitch = add_raw_log_pitch
+
+    @property
+    def parameters(self):
+        return {
+            "sample_frequency": self.extraction_opts.samp_freq,
+            "frame_length": self.extraction_opts.frame_length_ms,
+            "frame_shift": self.extraction_opts.frame_shift_ms,
+            "min_f0": self.extraction_opts.min_f0,
+            "max_f0": self.extraction_opts.max_f0,
+            "soft_min_f0": self.extraction_opts.soft_min_f0,
+            "penalty_factor": self.extraction_opts.penalty_factor,
+            "lowpass_cutoff": self.extraction_opts.lowpass_cutoff,
+            "resample_frequency": self.extraction_opts.resample_freq,
+            "delta_pitch": self.extraction_opts.delta_pitch,
+            "nccf_ballast": self.extraction_opts.nccf_ballast,
+            "lowpass_filter_width": self.extraction_opts.lowpass_filter_width,
+            "upsample_filter_width": self.extraction_opts.upsample_filter_width,
+            "max_frames_latency": self.extraction_opts.max_frames_latency,
+            "frames_per_chunk": self.extraction_opts.frames_per_chunk,
+            "simulate_first_pass_online": self.extraction_opts.simulate_first_pass_online,
+            "recompute_frame": self.extraction_opts.recompute_frame,
+            "snip_edges": self.extraction_opts.snip_edges,
+            "pitch_scale": self.process_opts.pitch_scale,
+            "pov_scale": self.process_opts.pov_scale,
+            "pov_offset": self.process_opts.pov_offset,
+            "delta_pitch_scale": self.process_opts.delta_pitch_scale,
+            "delta_pitch_noise_stddev": self.process_opts.delta_pitch_noise_stddev,
+            "normalization_left_context": self.process_opts.normalization_left_context,
+            "normalization_right_context": self.process_opts.normalization_right_context,
+            "delta_window": self.process_opts.delta_window,
+            "delay": self.process_opts.delay,
+            "add_pov_feature": self.process_opts.add_pov_feature,
+            "add_normalized_log_pitch": self.process_opts.add_normalized_log_pitch,
+            "add_delta_pitch": self.process_opts.add_delta_pitch,
+            "add_raw_log_pitch": self.process_opts.add_raw_log_pitch,
+        }
 
     def compute_pitch(
         self,

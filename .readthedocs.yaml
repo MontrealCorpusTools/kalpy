@@ -10,3 +10,10 @@ sphinx:
 
 conda:
   environment: rtd_environment.yml
+
+# This part is necessary otherwise the project is not built
+python:
+   version: 3.9
+   install:
+      - method: pip
+        path: .

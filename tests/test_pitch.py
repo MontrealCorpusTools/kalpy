@@ -18,33 +18,33 @@ def test_generate_pitch(wav_path):
 def test_export_pitch(wav_path, temp_dir):
     output_file_name = temp_dir.joinpath("mfccs.ark")
     feature_generator = PitchComputer(snip_edges=False)
-    segments = {"1": Segment(wav_path, 1, 2)}
+    segments = {"1-1": Segment(wav_path)}
     feature_generator.export_feats(output_file_name, segments.items())
     assert output_file_name.exists()
 
     archive = FeatureArchive(output_file_name)
     for utt, pitch in archive:
         pitch = pitch.numpy()
-        assert utt == "1"
-        assert pitch.shape[0] == 100
+        assert utt == "1-1"
+        assert pitch.shape[0] == 2672
         assert pitch.shape[1] == 3
-    pitch = archive["1"].numpy()
-    assert pitch.shape[0] == 100
+    pitch = archive["1-1"].numpy()
+    assert pitch.shape[0] == 2672
     assert pitch.shape[1] == 3
 
     archive.close()
     os.remove(output_file_name)
     feature_generator.export_feats(
-        output_file_name, segments.items(), write_scp=True, compress=True
+        output_file_name, segments.items(), write_scp=True, compress=False
     )
     assert output_file_name.with_suffix(".scp").exists()
 
     archive = FeatureArchive(output_file_name.with_suffix(".scp"))
     for utt, pitch in archive:
         pitch = pitch.numpy()
-        assert utt == "1"
-        assert pitch.shape[0] == 100
+        assert utt == "1-1"
+        assert pitch.shape[0] == 2672
         assert pitch.shape[1] == 3
-    pitch = archive["1"].numpy()
-    assert pitch.shape[0] == 100
+    pitch = archive["1-1"].numpy()
+    assert pitch.shape[0] == 2672
     assert pitch.shape[1] == 3

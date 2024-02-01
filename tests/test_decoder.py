@@ -29,10 +29,10 @@ def test_training_graphs(
     assert graph.num_states() > 0
     assert graph.start() != pywrapfst.NO_STATE_ID
     output_file_name = mono_temp_dir.joinpath("fsts.ark")
-    gc.export_graphs(output_file_name, [("1", acoustic_corpus_text)])
+    gc.export_graphs(output_file_name, [("1-1", acoustic_corpus_text)])
     assert output_file_name.exists()
     os.remove(output_file_name)
-    gc.export_graphs(output_file_name, [("1", acoustic_corpus_text)], write_scp=True)
+    gc.export_graphs(output_file_name, [("1-1", acoustic_corpus_text)], write_scp=True)
     assert output_file_name.exists()
     assert output_file_name.with_suffix(".scp").exists()
 
@@ -60,10 +60,10 @@ def test_training_graphs_sat(
     graph.write(str(sat_temp_dir.joinpath("LG_debug.fst")))
 
     output_file_name = sat_temp_dir.joinpath("fsts.ark")
-    gc.export_graphs(output_file_name, [("1", acoustic_corpus_text)])
+    gc.export_graphs(output_file_name, [("1-1", acoustic_corpus_text)])
     assert output_file_name.exists()
     os.remove(output_file_name)
-    gc.export_graphs(output_file_name, [("1", acoustic_corpus_text)], write_scp=True)
+    gc.export_graphs(output_file_name, [("1-1", acoustic_corpus_text)], write_scp=True)
     assert output_file_name.exists()
     assert output_file_name.with_suffix(".scp").exists()
 

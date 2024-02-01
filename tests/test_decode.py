@@ -17,7 +17,7 @@ def test_decode(mono_tree_path, mono_model_path, dictionary_path, mono_temp_dir,
     gc = DecodeGraphCompiler(mono_model_path, mono_tree_path, lc, arpa_path=lm_path)
     cmvn_file_name = mono_temp_dir.joinpath("cmvn.ark")
     utt2spk = KaldiMapping()
-    utt2spk["1"] = "1"
+    utt2spk["1-1"] = "1"
     feature_archive = FeatureArchive(
         mono_temp_dir.joinpath("mfccs.ark"),
         utt2spk=utt2spk,
@@ -26,7 +26,7 @@ def test_decode(mono_tree_path, mono_model_path, dictionary_path, mono_temp_dir,
     )
     aligner = GmmDecoder(mono_model_path, gc.hclg_fst, beam=1000)
     for alignment in aligner.decode_utterances(feature_archive):
-        assert alignment.utterance_id == "1"
+        assert alignment.utterance_id == "1-1"
         assert len(alignment.alignment) == 2672
         assert alignment.per_frame_likelihoods.numpy().shape[0] == 2672
         ctm = alignment.generate_ctm(aligner.transition_model, lc.phone_table)
@@ -55,7 +55,7 @@ def test_decode_sat_first_pass(
     word_file_name = sat_temp_dir.joinpath("words.ark")
     utt2spk = KaldiMapping()
     textgrid_name = sat_temp_dir.joinpath("first_pass_decode.TextGrid")
-    utt2spk["1"] = "1"
+    utt2spk["1-1"] = "1"
     feature_archive = FeatureArchive(
         sat_temp_dir.joinpath("mfccs.ark"),
         utt2spk=utt2spk,
@@ -74,8 +74,8 @@ def test_decode_sat_first_pass(
     assert lattice_file_name.exists()
     assert alignment_file_name.exists()
     alignment_archive = AlignmentArchive(alignment_file_name, words_file_name=word_file_name)
-    alignment = alignment_archive["1"]
-    assert len(alignment.alignment) == 2670
+    alignment = alignment_archive["1-1"]
+    assert len(alignment.alignment) == 2672
     intervals = alignment.generate_ctm(decoder.transition_model, lc.phone_table)
     text = " ".join(lc.word_table.find(x) for x in alignment.words)
     ctm = lc.phones_to_pronunciations(text, alignment.words, intervals)
@@ -105,7 +105,7 @@ def test_decode_sat_second_pass(
     lattice_file_name = sat_temp_dir.joinpath("lat_second_pass.ark")
     alignment_file_name = sat_temp_dir.joinpath("ali_decode_second_pass.ark")
     utt2spk = KaldiMapping()
-    utt2spk["1"] = "1"
+    utt2spk["1-1"] = "1"
     feature_archive = FeatureArchive(
         sat_temp_dir.joinpath("mfccs.ark"),
         utt2spk=utt2spk,
@@ -125,8 +125,8 @@ def test_decode_sat_second_pass(
     assert lattice_file_name.exists()
     assert alignment_file_name.exists()
     alignment_archive = AlignmentArchive(alignment_file_name, words_file_name=word_file_name)
-    alignment = alignment_archive["1"]
-    assert len(alignment.alignment) == 2670
+    alignment = alignment_archive["1-1"]
+    assert len(alignment.alignment) == 2672
     intervals = alignment.generate_ctm(decoder.transition_model, lc.phone_table)
     text = " ".join(lc.word_table.find(x) for x in alignment.words)
     ctm = lc.phones_to_pronunciations(text, alignment.words, intervals)
@@ -155,7 +155,7 @@ def test_decode_sat_lm_rescore(
     lattice_file_name = sat_temp_dir.joinpath("lat_second_pass.ark")
     lattice_output_file_name = sat_temp_dir.joinpath("lat_second_pass_rescore.ark")
     utt2spk = KaldiMapping()
-    utt2spk["1"] = "1"
+    utt2spk["1-1"] = "1"
     decoder = LmRescorer(gc.g_fst)
     lattice_archive = LatticeArchive(lattice_file_name)
     decoder.export_lattices(lattice_output_file_name, lattice_archive, gc.g_carpa)
