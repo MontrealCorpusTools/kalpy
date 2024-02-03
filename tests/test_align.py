@@ -76,8 +76,7 @@ def test_align_sat_first_pass(
     alignment = alignment_archive["1-1"]
     assert len(alignment.alignment) == 2672
     intervals = alignment.generate_ctm(aligner.transition_model, lc.phone_table)
-    text = " ".join(lc.word_table.find(x) for x in alignment.words)
-    ctm = lc.phones_to_pronunciations(text, alignment.words, intervals)
+    ctm = lc.phones_to_pronunciations(alignment.words, intervals)
     ctm.export_textgrid(textgrid_name, file_duration=26.72)
     reference_alignment_archive = AlignmentArchive(reference_first_pass_ali_path)
     reference_alignment = reference_alignment_archive["1-1"]
@@ -129,8 +128,7 @@ def test_align_sat_second_pass(
     alignment = alignment_archive["1-1"]
     assert len(alignment.alignment) == 2672
     intervals = alignment.generate_ctm(aligner.transition_model, lc.phone_table)
-    text = " ".join(lc.word_table.find(x) for x in alignment.words)
-    ctm = lc.phones_to_pronunciations(text, alignment.words, intervals)
+    ctm = lc.phones_to_pronunciations(alignment.words, intervals)
     ctm.export_textgrid(textgrid_name, file_duration=26.72)
 
     reference_alignment_archive = AlignmentArchive(reference_second_pass_ali_path)

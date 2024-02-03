@@ -4,6 +4,11 @@
 Changelog
 =========
 
+0.6.0
+-----
+
+- Fixed a bug in feature archives where fMLLR transforms were being ignored
+
 0.5.1
 -----
 

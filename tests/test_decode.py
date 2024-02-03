@@ -77,8 +77,7 @@ def test_decode_sat_first_pass(
     alignment = alignment_archive["1-1"]
     assert len(alignment.alignment) == 2672
     intervals = alignment.generate_ctm(decoder.transition_model, lc.phone_table)
-    text = " ".join(lc.word_table.find(x) for x in alignment.words)
-    ctm = lc.phones_to_pronunciations(text, alignment.words, intervals)
+    ctm = lc.phones_to_pronunciations(alignment.words, intervals)
     ctm.export_textgrid(textgrid_name, file_duration=26.72)
 
 
@@ -128,8 +127,7 @@ def test_decode_sat_second_pass(
     alignment = alignment_archive["1-1"]
     assert len(alignment.alignment) == 2672
     intervals = alignment.generate_ctm(decoder.transition_model, lc.phone_table)
-    text = " ".join(lc.word_table.find(x) for x in alignment.words)
-    ctm = lc.phones_to_pronunciations(text, alignment.words, intervals)
+    ctm = lc.phones_to_pronunciations(alignment.words, intervals)
     ctm.export_textgrid(textgrid_name, file_duration=26.72)
 
 
