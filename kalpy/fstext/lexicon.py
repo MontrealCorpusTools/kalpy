@@ -916,10 +916,10 @@ class LexiconCompiler:
 
     def phones_to_pronunciations(
         self,
-        text: str,
         word_symbols: typing.List[int],
         intervals: typing.List[CtmInterval],
         transcription: bool = False,
+        text: str = None,
     ) -> HierarchicalCtm:
 
         phones = [x.symbol for x in intervals]
@@ -928,12 +928,10 @@ class LexiconCompiler:
             phones,
             transcription=transcription,
         )
-        if transcription:
-            actual_words = [self.word_table.find(x) for x in word_symbols]
-            if not text:
-                text = " ".join(actual_words)
-        else:
-            actual_words = [x for x in text.split() if x != self.silence_word]
+
+        actual_words = [self.word_table.find(x) for x in word_symbols]
+        if not text:
+            text = " ".join(actual_words)
         word_intervals = []
         current_phone_index = 0
         current_word_index = 0
@@ -1002,10 +1000,10 @@ class G2PCompiler(LexiconCompiler):
 
     def phones_to_pronunciations(
         self,
-        text: str,
         word_symbols: typing.List[int],
         intervals: typing.List[CtmInterval],
         transcription: bool = False,
+        text: str = None,
     ) -> HierarchicalCtm:
         phone_symbols = [x.symbol for x in intervals]
         word_symbols = [self.word_table.find(x) for x in text.split()]
