@@ -22,7 +22,6 @@
 #include "fstext/table-matcher.h"
 #include "fstext/trivial-factor-weight.h"
 #include "fst/fstlib.h"
-#include "fst/fst-decl.h"
 #include "fstext/lattice-weight.h"
 #include "lat/kaldi-lattice.h"
 #include "hmm/transition-model.h"
@@ -1745,7 +1744,7 @@ void init_fstext(py::module &_m) {
     ){
       py::gil_scoped_release gil_release;
         auto pywrapfst_mod = py::module_::import("pywrapfst");
-        auto ptr = reinterpret_cast<VectorFstStruct*>(fst.ptr());
+        auto ptr = reinterpret_cast<VectorFstObject*>(fst.ptr());
         auto mf = ptr->__pyx_base._mfst->GetMutableFst<StdArc>();
             VectorFst<StdArc> vf(*mf);
 
@@ -1788,7 +1787,7 @@ void init_fstext(py::module &_m) {
 
       py::gil_scoped_release gil_release;
         auto pywrapfst_mod = py::module_::import("pywrapfst");
-        auto ptr = reinterpret_cast<VectorFstStruct*>(fst.ptr());
+        auto ptr = reinterpret_cast<VectorFstObject*>(fst.ptr());
         auto mf = ptr->__pyx_base._mfst->GetMutableFst<StdArc>();
             VectorFst<StdArc> vf(*mf);
       int32 h = HighestNumberedInputSymbol(vf);
@@ -1883,7 +1882,7 @@ void init_fstext(py::module &_m) {
       bool use_log = false
     ){
         auto pywrapfst_mod = py::module_::import("pywrapfst");
-        auto ptr = reinterpret_cast<VectorFstStruct*>(fst.ptr());
+        auto ptr = reinterpret_cast<VectorFstObject*>(fst.ptr());
         auto mf = ptr->__pyx_base._mfst->GetMutableFst<StdArc>();
             VectorFst<StdArc> vf(*mf);
       py::gil_scoped_release gil_release;
@@ -1928,7 +1927,7 @@ void init_fstext(py::module &_m) {
     bool test_in_log = true
     ){
         auto pywrapfst_mod = py::module_::import("pywrapfst");
-        auto ptr = reinterpret_cast<VectorFstStruct*>(fst.ptr());
+        auto ptr = reinterpret_cast<VectorFstObject*>(fst.ptr());
         auto mf = ptr->__pyx_base._mfst->GetMutableFst<StdArc>();
             VectorFst<StdArc> vf(*mf);
     bool ans;
@@ -1982,7 +1981,7 @@ void init_fstext(py::module &_m) {
         float delta = kDelta
     ){
         auto pywrapfst_mod = py::module_::import("pywrapfst");
-        auto ptr = reinterpret_cast<VectorFstStruct*>(fst.ptr());
+        auto ptr = reinterpret_cast<VectorFstObject*>(fst.ptr());
         auto mf = ptr->__pyx_base._mfst->GetMutableFst<StdArc>();
             VectorFst<StdArc> vf(*mf);
       py::gil_scoped_release gil_release;
@@ -2030,7 +2029,7 @@ void init_fstext(py::module &_m) {
             BaseFloat delta = kDelta
       ){
         auto pywrapfst_mod = py::module_::import("pywrapfst");
-        auto ptr = reinterpret_cast<VectorFstStruct*>(fst.ptr());
+        auto ptr = reinterpret_cast<VectorFstObject*>(fst.ptr());
         auto mf = ptr->__pyx_base._mfst->GetMutableFst<StdArc>();
             VectorFst<StdArc> vf(*mf);
       py::gil_scoped_release gil_release;

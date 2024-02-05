@@ -353,7 +353,7 @@ void init_lm(py::module &_m) {
     bool ilabel_sort = true
     ){
         auto pywrapfst_mod = py::module_::import("pywrapfst");
-        auto ptr = reinterpret_cast<SymbolTableStruct*>(symbol_table.ptr());
+        auto ptr = reinterpret_cast<SymbolTableObject*>(symbol_table.ptr());
       fst::SymbolTable* symbols = ptr->_smart_table.get();
     int64 disambig_symbol_id = 0;
 

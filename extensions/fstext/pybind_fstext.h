@@ -10,10 +10,7 @@
 #include "fst/script/fst-class.h"
 #include "fst/script/info-impl.h"
 #include "fst/script/print-impl.h"
-#include "fst/vector-fst.h"
-#include "fst/fst.h"
 #include "fst/fstlib.h"
-#include "fst/fst-decl.h"
 #include "fstext/fstext-utils.h"
 #include "fstext/kaldi-fst-io.h"
 #include "fstext/lattice-utils.h"
@@ -868,12 +865,14 @@ void pybind_vector_fst_impl(py::module& m, const std::string& class_name,
                   py::arg("strm"), py::arg("opts"),
                   py::return_value_policy::take_ownership,
       py::call_guard<py::gil_scoped_release>())
-      .def_static("Read", overload_cast_<const std::string&>()(&PyClass::Read),
+      .def_static("Read",
+            overload_cast_<std::string_view>()(&PyClass::Read),
                   "Read a VectorFst from a file, returning nullptr on error; "
                   "empty "
                   "filename reads from standard input.",
-                  py::arg("filename"), py::return_value_policy::reference,
-      py::call_guard<py::gil_scoped_release>())
+                  py::arg("source"),
+                  py::return_value_policy::reference,
+                  py::call_guard<py::gil_scoped_release>())
       .def("Write",
            // clang-format off
             (bool (PyClass::*)(std::ostream&, const fst::FstWriteOptions&)const)&PyClass::Write,
@@ -904,14 +903,14 @@ void pybind_vector_fst_impl(py::module& m, const std::string& class_name,
 
         auto pywrapfst_mod = py::module_::import("pywrapfst");
 
-        VectorFstStruct py_fst;
+        VectorFstObject py_fst;
         fst::script::MutableFstClass vf(f);
         py_fst.__pyx_base._mfst = std::shared_ptr<fst::script::MutableFstClass>(&vf);
         return py_fst;
       }, py::return_value_policy::take_ownership)*/
       .def_static("from_pynini", [](py::object fst) {
         auto pywrapfst_mod = py::module_::import("pywrapfst");
-        auto ptr = reinterpret_cast<VectorFstStruct*>(fst.ptr());
+        auto ptr = reinterpret_cast<VectorFstObject*>(fst.ptr());
         auto mf = ptr->__pyx_base._mfst->GetMutableFst<A>();
             PyClass *vf = new PyClass(*mf);
             return vf;
@@ -1025,22 +1024,25 @@ void pybind_lattice_fst_impl(py::module& m, const std::string& class_name,
       .def("Type", &PyClass::Type, "FST typename",
            py::return_value_policy::reference)
       .def("Copy", &PyClass::Copy,
-           "Get a copy of this VectorFst. See Fst<>::Copy() for further "
+           "Get a copy of this Lattice. See Fst<>::Copy() for further "
            "doc.",
            py::arg("safe") = false, py::return_value_policy::take_ownership)
       .def_static("Read",
                   // clang-format off
-            overload_cast_<std::istream&, const fst::FstReadOptions&>()(&PyClass::Read),
+            py::overload_cast<std::istream&, const fst::FstReadOptions&>(&PyClass::Read),
                   // clang-format on
-                  "Reads a VectorFst from an input stream, returning nullptr "
+                  "Reads a Lattice from an input stream, returning nullptr "
                   "on error.",
                   py::arg("strm"), py::arg("opts"),
                   py::return_value_policy::take_ownership)
-      .def_static("Read", overload_cast_<const std::string&>()(&PyClass::Read),
-                  "Read a VectorFst from a file, returning nullptr on error; "
+      .def_static("Read",
+            overload_cast_<std::string_view>()(&PyClass::Read),
+                  "Read a Lattice from a file, returning nullptr on error; "
                   "empty "
-                  "filename reads from standard input.",
-                  py::arg("filename"), py::return_value_policy::take_ownership)
+                  "source reads from standard input.",
+                  py::arg("source"),
+                  py::return_value_policy::reference,
+                  py::call_guard<py::gil_scoped_release>())
       .def("Write",
            // clang-format off
             (bool (PyClass::*)(std::ostream&, const fst::FstWriteOptions&)const)&PyClass::Write,
@@ -1139,17 +1141,20 @@ void pybind_const_fst_impl(py::module& m, const std::string& class_name,
            py::arg("safe") = false, py::return_value_policy::take_ownership)
       .def_static("Read",
                   // clang-format off
-            overload_cast_<std::istream&, const fst::FstReadOptions&>()(&PyClass::Read),
+            py::overload_cast<std::istream&, const fst::FstReadOptions&>(&PyClass::Read),
                   // clang-format on
                   "Reads a ConstFst from an input stream, returning nullptr "
                   "on error.",
                   py::arg("strm"), py::arg("opts"),
                   py::return_value_policy::take_ownership)
-      .def_static("Read", overload_cast_<const std::string&>()(&PyClass::Read),
+      .def_static("Read",
+            overload_cast_<std::string_view>()(&PyClass::Read),
                   "Read a ConstFst from a file, returning nullptr on error; "
                   "empty "
-                  "filename reads from standard input.",
-                  py::arg("filename"), py::return_value_policy::reference)
+                  "source reads from standard input.",
+                  py::arg("source"),
+                  py::return_value_policy::reference,
+                  py::call_guard<py::gil_scoped_release>())
       .def("Write",
            // clang-format off
             (bool (PyClass::*)(std::ostream&, const fst::FstWriteOptions&)const)&PyClass::Write,

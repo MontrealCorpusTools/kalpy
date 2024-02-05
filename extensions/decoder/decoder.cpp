@@ -1712,7 +1712,7 @@ void pybind_training_graph_compiler(py::module &m) {
                 py::object fst, const std::vector<int32> &disambig_syms,
                 const TrainingGraphCompilerOptions &opts){
                   auto pywrapfst_mod = py::module_::import("pywrapfst");
-                  auto ptr = reinterpret_cast<VectorFstStruct*>(fst.ptr());
+                  auto ptr = reinterpret_cast<VectorFstObject*>(fst.ptr());
                   VectorFst<StdArc>* mf = down_cast<VectorFst<StdArc> *>(ptr->__pyx_base._mfst->GetMutableFst<StdArc>());
                     TrainingGraphCompiler gc(trans_model, ctx_dep, mf, disambig_syms, opts);
                     return gc;
@@ -1749,7 +1749,7 @@ void pybind_training_graph_compiler(py::module &m) {
         .def("CompileGraphFromLG",
                [](PyClass& gc, py::object fst){
                   auto pywrapfst_mod = py::module_::import("pywrapfst");
-                  auto ptr = reinterpret_cast<VectorFstStruct*>(fst.ptr());
+                  auto ptr = reinterpret_cast<VectorFstObject*>(fst.ptr());
                   auto vf = ptr->__pyx_base._mfst->GetMutableFst<StdArc>();
                   VectorFst<StdArc> phone2word_fst(*vf);
                     VectorFst<StdArc> decode_fst;
