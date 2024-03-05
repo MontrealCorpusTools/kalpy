@@ -10,7 +10,7 @@ dependencies:
   - kaldi=*=*cpu*
   - scipy
   - pynini
-  - openfst
+  - openfst=1.8.3
   - setuptools_scm
   - pybind11
   - pytest
