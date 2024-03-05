@@ -173,8 +173,7 @@ autodoc_typehints = "none"
 # autodoc_typehints_description_target = 'documented'
 # autoclass_content = 'both'
 autodoc_docstring_signature = True
-autodoc_type_aliases = {
-}
+autodoc_type_aliases = {}
 
 napoleon_preprocess_types = False
 napoleon_attr_annotations = False
@@ -245,7 +244,7 @@ exclude_patterns = []
 # The reST default role (used for this markup: `text`) to use for all
 # documents.
 #
-default_role = "autolink"
+default_role = "code"
 
 # If true, '()' will be appended to :func: etc. cross-reference text.
 #
@@ -262,9 +261,7 @@ add_function_parentheses = False
 # show_authors = False
 
 # nitpicky = True
-nitpick_ignore = [
-    
-]
+nitpick_ignore = []
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = "sphinx"
@@ -512,9 +509,7 @@ latex_elements = {
 # Grouping the document tree into Texinfo files. List of tuples
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
-texinfo_documents = [
-
-]
+texinfo_documents = []
 
 # Documents to append as an appendix to all manuals.
 #

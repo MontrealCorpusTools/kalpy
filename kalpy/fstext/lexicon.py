@@ -26,11 +26,11 @@ class Pronunciation:
 
     orthography: str
     pronunciation: str
-    probability: typing.Optional[float]
-    silence_after_probability: typing.Optional[float]
-    silence_before_correction: typing.Optional[float]
-    non_silence_before_correction: typing.Optional[float]
-    disambiguation: typing.Optional[int]
+    probability: typing.Optional[float] = None
+    silence_after_probability: typing.Optional[float] = None
+    silence_before_correction: typing.Optional[float] = None
+    non_silence_before_correction: typing.Optional[float] = None
+    disambiguation: typing.Optional[int] = None
 
 
 def parse_dictionary_file(
@@ -192,10 +192,9 @@ class LexiconCompiler:
         self._align_lexicon = None
         self.word_begin_label = word_begin_label
         self.word_end_label = word_end_label
-        self.start_state = None
-        self.loop_state = None
-        self.silence_state = None
-        self.non_silence_state = None
+        self.start_state = 0
+        self.non_silence_state = 1
+        self.silence_state = 2
 
     def clear(self):
         self.pronunciations = []
@@ -364,12 +363,17 @@ class LexiconCompiler:
         self.word_table.find(self.silence_word)
         self._fst = pynini.Fst()
         self._align_fst = pynini.Fst()
-        self.start_state = self._fst.add_state()
+        # Start state = 0
+        self._fst.add_state()
         self._align_fst.add_state()
         self._fst.set_start(self.start_state)
-        self.non_silence_state = self._fst.add_state()  # Also loop state
+
+        # Non silence state = 1
+        self._fst.add_state()  # Also loop state
         self._align_fst.add_state()
-        self.silence_state = self._fst.add_state()
+
+        # Silence state = 2
+        self._fst.add_state()
         self._align_fst.add_state()
 
         self._align_fst.set_start(self.start_state)

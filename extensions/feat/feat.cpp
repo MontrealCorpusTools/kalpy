@@ -209,6 +209,7 @@ void feat_feat_functions(py::module& m){
                    left_context,
                    right_context,
                             &output_features);
+              py::gil_scoped_acquire acquire;
             return output_features;
 
         },
