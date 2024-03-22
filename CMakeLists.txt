@@ -86,7 +86,9 @@ target_link_libraries(_kalpy PUBLIC kaldi-base kaldi-chain
                                     fstscript
                                     )
 
-if(CUDAToolkit_FOUND)
+find_library(KALDI_CUDADECODER kaldi-cudadecoder)
+
+if(CUDAToolkit_FOUND AND KALDI_CUDADECODER)
 
    target_link_libraries(_kalpy PUBLIC kaldi-cudadecoder kaldi-cudafeat
                                     )

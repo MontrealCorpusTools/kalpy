@@ -4,11 +4,11 @@ from __future__ import annotations
 import os
 import typing
 
-from _kalpy.matrix import FloatVector
+from _kalpy.matrix import DoubleVector
 from _kalpy.util import (
-    RandomAccessBaseFloatVectorReader,
+    RandomAccessBaseDoubleVectorReader,
     RandomAccessInt32VectorVectorReader,
-    SequentialBaseFloatVectorReader,
+    SequentialBaseDoubleVectorReader,
     SequentialInt32VectorVectorReader,
 )
 from kalpy.data import PathLike
@@ -31,7 +31,7 @@ class IvectorArchive:
         self.file_name = str(file_name)
         self.num_utterances_file_name = num_utterances_file_name
         self.read_specifier = generate_read_specifier(file_name)
-        self.random_reader = RandomAccessBaseFloatVectorReader(self.read_specifier)
+        self.random_reader = RandomAccessBaseDoubleVectorReader(self.read_specifier)
         self.num_utterances_mapping = {}
         if self.num_utterances_file_name is not None:
             with open(self.num_utterances_file_name) as f:
@@ -45,18 +45,18 @@ class IvectorArchive:
             self.random_reader.Close()
 
     @property
-    def sequential_reader(self) -> SequentialBaseFloatVectorReader:
+    def sequential_reader(self) -> SequentialBaseDoubleVectorReader:
         """Sequential reader for lattices"""
-        return SequentialBaseFloatVectorReader(self.read_specifier)
+        return SequentialBaseDoubleVectorReader(self.read_specifier)
 
-    def __iter__(self) -> typing.Generator[typing.Tuple[str, FloatVector]]:
+    def __iter__(self) -> typing.Generator[typing.Tuple[str, DoubleVector]]:
         """Iterate over the utterance lattices in the archive"""
         if self.read_specifier.startswith("scp"):
             with open(self.file_name, encoding="utf8") as f:
                 for line in f:
                     line = line.strip()
                     key, ark_path = line.split(maxsplit=1)
-                    ivector = read_kaldi_object(FloatVector, ark_path)
+                    ivector = read_kaldi_object(DoubleVector, ark_path)
                     num_utterances = self.num_utterances_mapping.get(key, 1)
                     yield key, ivector, num_utterances
         else:
@@ -74,7 +74,7 @@ class IvectorArchive:
     def __del__(self):
         self.close()
 
-    def __getitem__(self, item: str) -> FloatVector:
+    def __getitem__(self, item: str) -> DoubleVector:
         """Get lattice for a particular key from the archive file"""
         item = str(item)
         if not self.random_reader.HasKey(item):

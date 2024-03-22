@@ -869,6 +869,29 @@ void pybind_plda(py::module &m) {
         py::arg("utterance_ivector"),
         py::arg("transformed_enrolled_ivectors"),
         py::arg("num_enroll_utts"))
+      .def("score",
+        [](
+            PyClass &plda,
+            const VectorBase<float> & utterance_ivector,
+            const std::vector<Vector<float>> &transformed_enrolled_ivectors
+        ){
+          py::gil_scoped_release gil_release;
+          PldaConfig plda_config;
+          Vector<double> ivector_one_dbl(utterance_ivector);
+
+          std::vector<BaseFloat> scores;
+
+          for (int32 j = 0; j < transformed_enrolled_ivectors.size(); j++) {
+            Vector<double> ivector_two_dbl(transformed_enrolled_ivectors[j]);
+            scores.push_back(plda.LogLikelihoodRatio(ivector_one_dbl,
+                                                  1,
+                                                  ivector_two_dbl));
+          }
+          return scores;
+
+        },
+        py::arg("utterance_ivector"),
+        py::arg("transformed_enrolled_ivectors"))
       .def("log_likelihood_distance",
         [](
             PyClass &plda,
@@ -912,47 +935,24 @@ void pybind_plda(py::module &m) {
             py::buffer_info buf3 = result.request();
             double *ptr3 = static_cast<double *>(buf3.ptr);
             for (py::size_t i = 0; i < r_one.shape(0); i++){
-            Vector<double> ivector_one_dbl;
-            ivector_one_dbl.Resize(r_one.shape(1));
-            Vector<double> ivector_two_dbl;
-            ivector_two_dbl.Resize(r_two.shape(1));
-            for (py::size_t j = 0; j < r_one.shape(1); j++){
-              ivector_one_dbl(j) = r_one(i, j);
-              ivector_two_dbl(j) = r_two(i, j);
+              Vector<double> ivector_one_dbl;
+              ivector_one_dbl.Resize(r_one.shape(1));
+              Vector<double> ivector_two_dbl;
+              ivector_two_dbl.Resize(r_two.shape(1));
+              for (py::size_t j = 0; j < r_one.shape(1); j++){
+                ivector_one_dbl(j) = r_one(i, j);
+                ivector_two_dbl(j) = r_two(i, j);
 
-            }
-            ptr3[i] = 1.0 / Exp(plda.LogLikelihoodRatio(ivector_one_dbl,
-                                                    1,
-                                                    ivector_two_dbl));;
+              }
+              ptr3[i] = 1.0 / Exp(plda.LogLikelihoodRatio(ivector_one_dbl,
+                                                      1,
+                                                      ivector_two_dbl));;
 
             }
             return result;
         },
         py::arg("utterance_one_ivector"),
         py::arg("utterance_two_ivector"))
-      .def("score",
-        [](
-            PyClass &plda,
-            const VectorBase<float> & utterance_ivector,
-            const std::vector<Vector<float>> &transformed_enrolled_ivectors
-        ){
-          py::gil_scoped_release gil_release;
-          PldaConfig plda_config;
-          Vector<double> ivector_one_dbl(utterance_ivector);
-
-          std::vector<BaseFloat> scores;
-
-          for (int32 j = 0; j < transformed_enrolled_ivectors.size(); j++) {
-            Vector<double> ivector_two_dbl(transformed_enrolled_ivectors[j]);
-            scores.push_back(plda.LogLikelihoodRatio(ivector_one_dbl,
-                                                  1,
-                                                  ivector_two_dbl));
-          }
-          return scores;
-
-        },
-        py::arg("utterance_ivector"),
-        py::arg("transformed_enrolled_ivectors"))
       .def(py::pickle(
         [](const PyClass &p) { // __getstate__
             /* Return a tuple that fully encodes the state of the object */
@@ -1074,6 +1074,7 @@ void pybind_plda(py::module &m) {
             py::array_t<double> & transformed_test_ivector
         ){
           py::gil_scoped_release gil_release;
+          
           Vector<double> ivector_one_dbl;
           auto r1 = transformed_enroll_ivector.unchecked<1>();
           ivector_one_dbl.Resize(r1.shape(0));
@@ -1096,6 +1097,35 @@ void pybind_plda(py::module &m) {
         "are assumed to have been transformed by the function TransformIvector(). "
         "Note: any length normalization will have been done while computing "
         "the transformed iVectors.",
+        py::arg("transformed_enroll_ivector"),
+        py::arg("num_enroll_utts"),
+        py::arg("transformed_test_ivector"))
+      
+      .def("log_likelihood_ratio",
+        py::vectorize([](
+
+            PyClass &plda,
+            py::array_t<double> & transformed_enroll_ivector,
+            int32 num_enroll_utts,
+            py::array_t<double> & transformed_test_ivector
+        ){
+          py::gil_scoped_release gil_release;
+          Vector<double> ivector_one_dbl;
+          auto r1 = transformed_enroll_ivector.unchecked<1>();
+          ivector_one_dbl.Resize(r1.shape(0));
+          for (py::size_t i = 0; i < r1.shape(0); i++)
+            ivector_one_dbl(i) = r1(i);
+
+          Vector<double> ivector_two_dbl;
+          auto r2 = transformed_test_ivector.unchecked<1>();
+          ivector_two_dbl.Resize(r2.shape(0));
+          for (py::size_t i = 0; i < r2.shape(0); i++)
+            ivector_two_dbl(i) = r2(i);
+
+          return plda.LogLikelihoodRatio(ivector_one_dbl, num_enroll_utts, ivector_two_dbl);
+
+        }),
+        "Numpy vectorized function for log-likelihood ratio.",
         py::arg("transformed_enroll_ivector"),
         py::arg("num_enroll_utts"),
         py::arg("transformed_test_ivector"))
@@ -1427,7 +1457,8 @@ void init_ivector(py::module &_m) {
 
   m.def("ivector_subtract_mean",
     [](
-        std::vector<Vector<float>*> &ivectors
+        std::vector<Vector<float>*> &ivectors,
+      bool normalize = true
     ) {
           py::gil_scoped_release gil_release;
       Vector<double> sum;
@@ -1439,7 +1470,40 @@ void init_ivector(py::module &_m) {
         for (size_t i = 0; i < ivectors.size(); i++) {
           Vector<BaseFloat> *ivector = ivectors[i];
             ivector->AddVec(-1.0 / ivectors.size(), sum);
+            if (normalize){
+              double norm = ivector->Norm(2.0);
+              double ratio = norm / sqrt(ivector->Dim());
+              ivector->Scale(1.0 / ratio);
+
+            }
         }
     },
-        py::arg("ivectors"));
+        py::arg("ivectors"),
+        py::arg("normalize") = true);
+
+  m.def("ivector_subtract_mean",
+    [](
+        std::vector<Vector<double>*> &ivectors,
+      bool normalize = true
+    ) {
+          py::gil_scoped_release gil_release;
+      Vector<double> sum;
+
+        for (size_t i = 0; i < ivectors.size(); i++) {
+          if (sum.Dim() == 0) sum.Resize(ivectors[i]->Dim());
+          sum.AddVec(1.0, *ivectors[i]);
+        }
+        for (size_t i = 0; i < ivectors.size(); i++) {
+          Vector<double> *ivector = ivectors[i];
+            ivector->AddVec(-1.0 / ivectors.size(), sum);
+            if (normalize){
+              double norm = ivector->Norm(2.0);
+              double ratio = norm / sqrt(ivector->Dim());
+              ivector->Scale(1.0 / ratio);
+
+            }
+        }
+    },
+        py::arg("ivectors"),
+        py::arg("normalize") = true);
 }
