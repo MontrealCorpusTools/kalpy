@@ -271,9 +271,29 @@ class PitchComputer:
         if len(wave.shape) == 2:
             channel = 0 if segment.channel is None else segment.channel
             wave = wave[channel, :]
-        pitch = feat.compute_pitch(wave, self.extraction_opts, self.process_opts)
+        pitch = self.compute_pitch_for_wave(wave)
         if compress:
             pitch = CompressedMatrix(pitch)
+        return pitch
+
+    def compute_pitch_for_wave(
+        self,
+        wave: np.ndarray,
+    ) -> FloatMatrixBase:
+        """
+        Generate pitch features for exporting to a kaldi archive
+
+        Parameters
+        ----------
+        wave: :class:`~numpy.ndarray`
+            Waveform
+
+        Returns
+        -------
+        :class:`_kalpy.matrix.FloatMatrixBase`
+            Feature matrix for the segment
+        """
+        pitch = feat.compute_pitch(wave, self.extraction_opts, self.process_opts)
         return pitch
 
     def export_feats(
