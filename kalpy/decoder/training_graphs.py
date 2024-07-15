@@ -42,7 +42,7 @@ class TrainingGraphCompiler:
         Path to model file
     tree_path: str
         Path to tree file
-    lexicon: typing.Union[pathlib.Path, str, :class:`~kalpy.fstext.lexicon.LexiconCompiler`, VectorFst]
+    lexicon_compiler: :class:`~kalpy.fstext.lexicon.LexiconCompiler`
         Lexicon compiler to use in generating training graphs
     transition_scale: float
         Scale on transitions, typically set to 0 as it will be defined during alignment
@@ -63,8 +63,7 @@ class TrainingGraphCompiler:
         self,
         model_path: typing.Union[pathlib.Path, str],
         tree_path: typing.Union[pathlib.Path, str],
-        lexicon: typing.Union[pathlib.Path, str, LexiconCompiler, VectorFst],
-        words_symbols: typing.Union[pathlib.Path, str, pywrapfst.SymbolTable],
+        lexicon_compiler: LexiconCompiler,
         transition_scale: float = 0.0,
         self_loop_scale: float = 0.0,
         batch_size: int = 1000,
@@ -81,35 +80,22 @@ class TrainingGraphCompiler:
         self._compiler = None
         self.use_g2p = use_g2p
         self.lexicon_path = None
-        self.lexicon_compiler = None
-        self._fst = None
-        if isinstance(lexicon, LexiconCompiler):
-            self.lexicon_compiler = lexicon
-            if self.use_g2p:
-                self._fst = self.lexicon_compiler.fst
-            else:
-                self._fst = self.lexicon_compiler.fst
-            disambiguation_symbols = self.lexicon_compiler.disambiguation_symbols
-        elif isinstance(lexicon, VectorFst):
-            self._fst = lexicon
-        else:
-            self.lexicon_path = str(lexicon)
-        if isinstance(words_symbols, pywrapfst.SymbolTable):
-            self.word_table = words_symbols
-        else:
-            self.word_table = pywrapfst.SymbolTable.read_text(words_symbols)
+        self.lexicon_compiler = lexicon_compiler
         self.oov_word = oov_word
         if disambiguation_symbols is None:
             disambiguation_symbols = []
         self.disambiguation_symbols = disambiguation_symbols
-        self._kaldi_fst = self._fst
+        self._kaldi_fst = self.lexicon_compiler.fst
         if not isinstance(self._kaldi_fst, VectorFst):
-            self._kaldi_fst = VectorFst.from_pynini(self._fst)
+            self._kaldi_fst = VectorFst.from_pynini(self._kaldi_fst)
 
     def __del__(self):
         del self._compiler
         del self._kaldi_fst
-        del self._fst
+
+    @property
+    def word_table(self):
+        return self.lexicon_compiler.word_table
 
     def to_int(self, word: str) -> int:
         """
@@ -130,25 +116,15 @@ class TrainingGraphCompiler:
         return self.word_table.find(self.oov_word)
 
     @property
-    def fst(self):
-        if self._fst is None:
-            return pynini.Fst.read(self.lexicon_path)
-
-    @property
     def compiler(self):
         if self._compiler is None:
-            if self._fst is None:
-                if self.lexicon_compiler is None:
-                    self._fst = pynini.Fst.read(str(self.lexicon_path))
-                else:
-                    self._fst = self.lexicon_compiler.fst
             disambiguation_symbols = []
             if self.lexicon_compiler is not None and self.lexicon_compiler.disambiguation:
                 disambiguation_symbols = self.lexicon_compiler.disambiguation_symbols
             self._compiler = _TrainingGraphCompiler(
                 self.transition_model,
                 self.tree,
-                VectorFst.from_pynini(self._fst),
+                self._kaldi_fst,
                 disambiguation_symbols,
                 self.options,
             )
@@ -204,9 +180,6 @@ class TrainingGraphCompiler:
                     for t in transcript_batch:
                         fsts.append(self.compile_fst(t))
                 elif interjection_words:
-                    # fsts = []
-                    # for t in transcript_batch:
-                    #    fsts.append(self.compile_fst(t, interjection_words, cutoff_pattern))
                     fsts = self.compiler.CompileGraphs(transcript_batch)
                 else:
                     fsts = self.compiler.CompileGraphsFromText(transcript_batch)
@@ -237,9 +210,6 @@ class TrainingGraphCompiler:
                 for t in transcript_batch:
                     fsts.append(self.compile_fst(t))
             elif interjection_words:
-                # fsts = []
-                # for t in transcript_batch:
-                #    fsts.append(self.compile_fst(t, interjection_words, cutoff_pattern))
                 fsts = self.compiler.CompileGraphs(transcript_batch)
             else:
                 fsts = self.compiler.CompileGraphsFromText(transcript_batch)

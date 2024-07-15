@@ -22,9 +22,7 @@ def test_training_graphs(
     lc = LexiconCompiler(position_dependent_phones=False)
     lc.load_pronunciations(dictionary_path)
     lc.fst.write(str(mono_temp_dir.joinpath("lexicon.fst")))
-    gc = TrainingGraphCompiler(
-        mono_model_path, mono_tree_path, str(mono_temp_dir.joinpath("lexicon.fst")), lc.word_table
-    )
+    gc = TrainingGraphCompiler(mono_model_path, mono_tree_path, lc)
     graph = kaldi_to_pynini(gc.compile_fst(acoustic_corpus_text))
     assert graph.num_states() > 0
     assert graph.start() != pywrapfst.NO_STATE_ID
@@ -51,9 +49,7 @@ def test_training_graphs_sat(
     lc.fst.write(str(sat_temp_dir.joinpath("L_debug.fst")))
     lc.word_table.write_text(str(sat_temp_dir.joinpath("words.txt")))
     lc.phone_table.write_text(str(sat_temp_dir.joinpath("phones.txt")))
-    gc = TrainingGraphCompiler(
-        sat_model_path, sat_tree_path, str(sat_temp_dir.joinpath("L_debug.fst")), lc.word_table
-    )
+    gc = TrainingGraphCompiler(sat_model_path, sat_tree_path, lc)
     graph = kaldi_to_pynini(gc.compile_fst(acoustic_corpus_text))
     assert graph.num_states() > 0
     assert graph.start() != pywrapfst.NO_STATE_ID
