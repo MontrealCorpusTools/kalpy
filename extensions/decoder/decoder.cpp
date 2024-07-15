@@ -1770,6 +1770,20 @@ void pybind_training_graph_compiler(py::module &m) {
                "CompileGraphs allows you to compile a number of graphs at the same "
                "time.  This consumes more memory but is faster.",
                py::arg("word_fsts"), py::arg("out_fst"))
+        .def("CompileGraphs",
+
+               [](PyClass& gc, const std::vector<const fst::VectorFst<fst::StdArc> *> &word_fsts){
+
+                    py::gil_scoped_release gil_release;
+                    std::vector<fst::VectorFst<fst::StdArc>* > fsts;
+
+                    bool ans = gc.CompileGraphs(word_fsts, &fsts);
+                    return fsts;
+               },
+               "CompileGraphs allows you to compile a number of graphs at the same "
+               "time.  This consumes more memory but is faster.",
+               py::arg("word_fsts"),
+                  py::return_value_policy::take_ownership)
         .def("CompileGraphFromText",
                &PyClass::CompileGraphFromText,
                "This version creates an FST from the text and calls CompileGraph.",

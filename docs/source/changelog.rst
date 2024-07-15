@@ -4,6 +4,13 @@
 Changelog
 =========
 
+0.6.5
+-----
+
+- Changed how the :code:`silence_probability` parameter of :code:`LexiconCompiler` works with pronunciations that have silence probabilities, so that setting it to 0.0 will ensure that no optional silences are included
+- Changed :code:`TrainingGraphCompiler` signature to require a :code:`LexiconCompiler` rather than an FST/path and a word table
+- Added the functionality for adding interjection words in between each word in an alignment
+
 0.6.0
 -----
 

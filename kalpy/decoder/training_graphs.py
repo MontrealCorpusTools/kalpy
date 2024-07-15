@@ -42,7 +42,7 @@ class TrainingGraphCompiler:
         Path to model file
     tree_path: str
         Path to tree file
-    lexicon: typing.Union[pathlib.Path, str, :class:`~kalpy.fstext.lexicon.LexiconCompiler`, VectorFst]
+    lexicon_compiler: :class:`~kalpy.fstext.lexicon.LexiconCompiler`
         Lexicon compiler to use in generating training graphs
     transition_scale: float
         Scale on transitions, typically set to 0 as it will be defined during alignment
@@ -63,8 +63,7 @@ class TrainingGraphCompiler:
         self,
         model_path: typing.Union[pathlib.Path, str],
         tree_path: typing.Union[pathlib.Path, str],
-        lexicon: typing.Union[pathlib.Path, str, LexiconCompiler, VectorFst],
-        words_symbols: typing.Union[pathlib.Path, str, pywrapfst.SymbolTable],
+        lexicon_compiler: LexiconCompiler,
         transition_scale: float = 0.0,
         self_loop_scale: float = 0.0,
         batch_size: int = 1000,
@@ -81,31 +80,22 @@ class TrainingGraphCompiler:
         self._compiler = None
         self.use_g2p = use_g2p
         self.lexicon_path = None
-        self.lexicon_compiler = None
-        self._fst = None
-        if isinstance(lexicon, LexiconCompiler):
-            self.lexicon_compiler = lexicon
-            if self.use_g2p:
-                self._fst = self.lexicon_compiler.fst
-            else:
-                self._fst = self.lexicon_compiler.fst
-            disambiguation_symbols = self.lexicon_compiler.disambiguation_symbols
-        elif isinstance(lexicon, VectorFst):
-            self._fst = lexicon
-        else:
-            self.lexicon_path = str(lexicon)
-        if isinstance(words_symbols, pywrapfst.SymbolTable):
-            self.word_table = words_symbols
-        else:
-            self.word_table = pywrapfst.SymbolTable.read_text(words_symbols)
+        self.lexicon_compiler = lexicon_compiler
         self.oov_word = oov_word
         if disambiguation_symbols is None:
             disambiguation_symbols = []
         self.disambiguation_symbols = disambiguation_symbols
+        self._kaldi_fst = self.lexicon_compiler.fst
+        if not isinstance(self._kaldi_fst, VectorFst):
+            self._kaldi_fst = VectorFst.from_pynini(self._kaldi_fst)
 
     def __del__(self):
         del self._compiler
-        del self._fst
+        del self._kaldi_fst
+
+    @property
+    def word_table(self):
+        return self.lexicon_compiler.word_table
 
     def to_int(self, word: str) -> int:
         """
@@ -126,25 +116,15 @@ class TrainingGraphCompiler:
         return self.word_table.find(self.oov_word)
 
     @property
-    def fst(self):
-        if self._fst is None:
-            return pynini.Fst.read(self.lexicon_path)
-
-    @property
     def compiler(self):
         if self._compiler is None:
-            if self._fst is None:
-                if self.lexicon_compiler is None:
-                    self._fst = pynini.Fst.read(str(self.lexicon_path))
-                else:
-                    self._fst = self.lexicon_compiler.fst
             disambiguation_symbols = []
             if self.lexicon_compiler is not None and self.lexicon_compiler.disambiguation:
                 disambiguation_symbols = self.lexicon_compiler.disambiguation_symbols
             self._compiler = _TrainingGraphCompiler(
                 self.transition_model,
                 self.tree,
-                VectorFst.from_pynini(self._fst),
+                self._kaldi_fst,
                 disambiguation_symbols,
                 self.options,
             )
@@ -156,6 +136,8 @@ class TrainingGraphCompiler:
         transcripts: typing.Iterable[typing.Tuple[str, str]],
         write_scp: bool = False,
         callback: typing.Callable = None,
+        interjection_words: typing.List[str] = None,
+        cutoff_pattern: str = None,
     ):
         """
         Export training graphs to a kaldi archive file (i.e., fsts.ark)
@@ -168,6 +150,12 @@ class TrainingGraphCompiler:
             Dictionary of utterance IDs to transcripts
         write_scp: bool
             Flag for whether an SCP file should be generated as well
+        callback: callable, optional
+            Optional callback function for progress updates
+        interjection_words: list[str], optional
+            List of words to add as interjections to the transcripts
+        cutoff_pattern: str, optional
+            Cutoff symbol to use for inserting cutoffs before words
         """
         write_specifier = generate_write_specifier(file_name, write_scp)
         writer = VectorFstWriter(write_specifier)
@@ -175,10 +163,15 @@ class TrainingGraphCompiler:
         transcript_batch = []
         num_done = 0
         num_error = 0
+        logger.debug(f"DISAMBIGUATION: {self.lexicon_compiler.disambiguation}")
         for key, transcript in transcripts:
             keys.append(key)
             if self.use_g2p:
                 transcript_batch.append(transcript)
+            elif interjection_words:
+                transcript_batch.append(
+                    self.generate_utterance_graph(transcript, interjection_words, cutoff_pattern)
+                )
             else:
                 transcript_batch.append([self.to_int(x) for x in transcript.split()])
             if len(keys) >= self.batch_size:
@@ -186,8 +179,11 @@ class TrainingGraphCompiler:
                     fsts = []
                     for t in transcript_batch:
                         fsts.append(self.compile_fst(t))
+                elif interjection_words:
+                    fsts = self.compiler.CompileGraphs(transcript_batch)
                 else:
                     fsts = self.compiler.CompileGraphsFromText(transcript_batch)
+                del transcript_batch
                 assert len(fsts) == len(keys)
                 batch_done = 0
                 batch_error = 0
@@ -198,20 +194,26 @@ class TrainingGraphCompiler:
                         batch_error += 1
                         continue
                     writer.Write(str(key), fst)
+                    del fst
                     batch_done += 1
                 num_done += batch_done
                 num_error += batch_error
+                logger.debug(f"Done {num_done} utterances, errors on {num_error}.")
                 if callback:
                     callback(batch_done)
                 keys = []
                 transcript_batch = []
+                del fsts
         if keys:
             if self.use_g2p:
                 fsts = []
                 for t in transcript_batch:
                     fsts.append(self.compile_fst(t))
+            elif interjection_words:
+                fsts = self.compiler.CompileGraphs(transcript_batch)
             else:
                 fsts = self.compiler.CompileGraphsFromText(transcript_batch)
+            del transcript_batch
             assert len(fsts) == len(keys)
             batch_done = 0
             batch_error = 0
@@ -223,15 +225,133 @@ class TrainingGraphCompiler:
                     continue
                 writer.Write(str(key), fst)
                 batch_done += 1
+                del fst
             num_done += batch_done
             num_error += batch_error
+            del fsts
             if callback:
                 callback(batch_done)
         writer.Close()
         logger.info(f"Done {num_done} utterances, errors on {num_error}.")
 
+    def generate_utterance_graph(
+        self,
+        transcript: str,
+        interjection_words: typing.List[str] = None,
+        cutoff_pattern: str = None,
+    ) -> typing.Optional[VectorFst]:
+        if interjection_words is None:
+            interjection_words = []
+        default_interjection_cost = 3.0
+        cutoff_interjection_cost = default_interjection_cost
+        cutoff_symbol = -1
+        if cutoff_pattern is not None and self.word_table.member(cutoff_pattern):
+            cutoff_symbol = self.to_int(cutoff_pattern)
+        interjection_costs = {}
+        if interjection_words:
+            for iw in interjection_words:
+                if not self.word_table.member(iw):
+                    continue
+                if isinstance(interjection_words, dict):
+                    interjection_cost = interjection_words[iw] * default_interjection_cost
+                else:
+                    interjection_cost = default_interjection_cost
+                if isinstance(iw, str):
+                    iw = self.to_int(iw)
+                if iw == cutoff_symbol:
+                    cutoff_interjection_cost = interjection_cost
+                    continue
+                interjection_costs[iw] = interjection_cost
+        g = pynini.Fst()
+        start_state = g.add_state()
+        g.set_start(start_state)
+        if isinstance(transcript, str):
+            transcript = transcript.split()
+        for word_symbol in transcript:
+            if not isinstance(word_symbol, int):
+                word_symbol = self.to_int(word_symbol)
+            interjection_state = g.add_state()
+            for iw_symbol, interjection_cost in interjection_costs.items():
+                g.add_arc(
+                    start_state,
+                    pywrapfst.Arc(
+                        iw_symbol,
+                        iw_symbol,
+                        pywrapfst.Weight(g.weight_type(), interjection_cost),
+                        interjection_state,
+                    ),
+                )
+            if cutoff_pattern is not None:
+                cutoff_word = f"{cutoff_pattern[:-1]}-{self.word_table.find(word_symbol)}{cutoff_pattern[-1]}"
+                if self.word_table.member(cutoff_word):
+                    iw_symbol = self.to_int(cutoff_word)
+                    g.add_arc(
+                        start_state,
+                        pywrapfst.Arc(
+                            iw_symbol,
+                            iw_symbol,
+                            pywrapfst.Weight(g.weight_type(), cutoff_interjection_cost),
+                            interjection_state,
+                        ),
+                    )
+            g.add_arc(
+                start_state,
+                pywrapfst.Arc(
+                    word_symbol,
+                    word_symbol,
+                    pywrapfst.Weight(g.weight_type(), default_interjection_cost),
+                    interjection_state,
+                ),
+            )
+            g.add_arc(
+                start_state,
+                pywrapfst.Arc(
+                    self.word_table.find("<eps>"),
+                    self.word_table.find("<eps>"),
+                    pywrapfst.Weight(g.weight_type(), 1.0),
+                    interjection_state,
+                ),
+            )
+            final_state = g.add_state()
+            g.add_arc(
+                interjection_state,
+                pywrapfst.Arc(
+                    word_symbol,
+                    word_symbol,
+                    pywrapfst.Weight.one(g.weight_type()),
+                    final_state,
+                ),
+            )
+            start_state = final_state
+        final_state = g.add_state()
+        for iw_symbol, interjection_cost in interjection_costs.items():
+            g.add_arc(
+                start_state,
+                pywrapfst.Arc(
+                    iw_symbol,
+                    iw_symbol,
+                    pywrapfst.Weight(g.weight_type(), interjection_cost),
+                    final_state,
+                ),
+            )
+        g.add_arc(
+            start_state,
+            pywrapfst.Arc(
+                self.word_table.find("<eps>"),
+                self.word_table.find("<eps>"),
+                pywrapfst.Weight.one(g.weight_type()),
+                final_state,
+            ),
+        )
+        g.set_final(final_state, pywrapfst.Weight.one(g.weight_type()))
+        g = VectorFst.from_pynini(g)
+        return g
+
     def compile_fst(
-        self, transcript: str, interjection_words: typing.List[str] = None
+        self,
+        transcript: str,
+        interjection_words: typing.List[str] = None,
+        cutoff_pattern: str = None,
     ) -> typing.Optional[VectorFst]:
         """
         Compile a transcript to a training graph
@@ -240,6 +360,10 @@ class TrainingGraphCompiler:
         ----------
         transcript: str
             Orthographic transcript to compile
+        interjection_words: list[str], optional
+            List of words to add as interjections to the transcript
+        cutoff_pattern: str, optional
+            Cutoff symbol to use for inserting cutoffs before words
 
         Returns
         -------
@@ -247,7 +371,6 @@ class TrainingGraphCompiler:
             Training graph of transcript
         """
         if self.use_g2p:
-
             g_fst = pynini.accep(transcript, token_type=self.word_table)
             lg_fst = pynini.compose(g_fst, self._fst, compose_filter="alt_sequence")
             lg_fst = lg_fst.project("output").rmepsilon()
@@ -286,54 +409,18 @@ class TrainingGraphCompiler:
                 fst, self.transition_model, disambig_syms_in, self.options.self_loop_scale
             )
         elif interjection_words:
-            g = pynini.Fst()
-            start_state = g.add_state()
-            g.set_start(start_state)
-            for w in transcript.split():
-                word_symbol = self.to_int(w)
-                word_initial_state = g.add_state()
-                for iw in interjection_words:
-                    if not self.lexicon_compiler.word_table.member(iw):
-                        continue
-                    iw_symbol = self.to_int(iw)
-                    g.add_arc(
-                        word_initial_state - 1,
-                        pywrapfst.Arc(
-                            iw_symbol,
-                            iw_symbol,
-                            pywrapfst.Weight(g.weight_type(), 4.0),
-                            word_initial_state,
-                        ),
-                    )
-                word_final_state = g.add_state()
-                g.add_arc(
-                    word_initial_state,
-                    pywrapfst.Arc(
-                        word_symbol,
-                        word_symbol,
-                        pywrapfst.Weight.one(g.weight_type()),
-                        word_final_state,
-                    ),
-                )
-                g.add_arc(
-                    word_initial_state - 1,
-                    pywrapfst.Arc(
-                        word_symbol,
-                        word_symbol,
-                        pywrapfst.Weight.one(g.weight_type()),
-                        word_final_state,
-                    ),
-                )
-            g.set_final(word_final_state, pywrapfst.Weight.one(g.weight_type()))
+            g = self.generate_utterance_graph(transcript, interjection_words, cutoff_pattern)
+            # fst = VectorFst()
+            # self.compiler.CompileGraph(g, fst)
+            # lg_fst = pynini.compose(self._fst, g, compose_filter="alt_sequence")
+            # lg_fst = VectorFst.from_pynini(lg_fst)
+            lg_fst = fst_table_compose(self._kaldi_fst, g)
 
-            lg = pynini.compose(self.lexicon_compiler.fst, g)
-            lg.optimize()
-            lg.arcsort("olabel")
-            lg_fst = VectorFst.from_pynini(lg)
-
-            disambig_syms_in = []
-            if self.lexicon_compiler is not None and self.lexicon_compiler.disambiguation:
-                disambig_syms_in = self.lexicon_compiler.disambiguation_symbols
+            disambig_syms_in = (
+                []
+                if not self.lexicon_compiler.disambiguation
+                else self.lexicon_compiler.disambiguation_symbols
+            )
             lg_fst = fst_determinize_star(lg_fst, use_log=True)
             fst_minimize_encoded(lg_fst)
             fst_push_special(lg_fst)

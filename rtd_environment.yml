@@ -17,4 +17,4 @@ dependencies:
   - mock
   - setuptools-scm
   - kaldi =*=cpu*
-  - kalpy
+  - kalpy =*=cpu*
