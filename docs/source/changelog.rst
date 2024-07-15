@@ -4,6 +4,12 @@
 Changelog
 =========
 
+0.6.5
+-----
+
+- Changed how the :code:`silence_probability` parameter of LexiconCompiler works with pronunciations that have silence probabilities, so that setting it to 0.0 will ensure that no optional silences are included
+- Added the functionality for adding interjection words in between each word in an alignment
+
 0.6.0
 -----
 

@@ -362,7 +362,7 @@ html_context = {
 html_static_path = ["_static"]
 html_css_files = [
     "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/fontawesome.min.css",
-    "css/mfa.css",
+    "https://montreal-forced-aligner.readthedocs.io/en/latest/_static/css/mfa.css",
 ]
 
 # Add any extra paths that contain custom files (such as robots.txt or
