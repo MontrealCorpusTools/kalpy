@@ -181,9 +181,9 @@ class TrainingGraphCompiler:
                         fsts.append(self.compile_fst(t))
                 elif interjection_words:
                     fsts = self.compiler.CompileGraphs(transcript_batch)
+                    del transcript_batch
                 else:
                     fsts = self.compiler.CompileGraphsFromText(transcript_batch)
-                del transcript_batch
                 assert len(fsts) == len(keys)
                 batch_done = 0
                 batch_error = 0
