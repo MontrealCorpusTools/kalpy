@@ -4,6 +4,12 @@
 Changelog
 =========
 
+0.6.6
+-----
+
+- Updated code in parsing phones to word pronunciations to better support transcription capabilities
+- Change build system to ignore CUDA dependencies in an effort to simplify conda-forge build system
+
 0.6.5
 -----
 

@@ -43,7 +43,6 @@ find_package(CUDAToolkit)
 
 find_package(pybind11 REQUIRED)
 include_directories(extensions)
-if (CUDAToolkit_FOUND)
     pybind11_add_module(_kalpy extensions/_kalpy.cpp
                                 extensions/chain/chain.cpp
                                 extensions/cudamatrix/cudamatrix.cpp
@@ -88,6 +87,7 @@ if (CUDAToolkit_FOUND)
                                         fst
                                         fstscript
                                         )
+if (CUDAToolkit_FOUND)
 
     find_library(KALDI_CUDADECODER kaldi-cudadecoder)
 
@@ -96,46 +96,11 @@ if (CUDAToolkit_FOUND)
        target_link_libraries(_kalpy PUBLIC kaldi-cudadecoder kaldi-cudafeat
                                         )
     endif()
-else()
-    pybind11_add_module(_kalpy extensions/_kalpy.cpp
-                                extensions/decoder/decoder.cpp
-                                extensions/feat/feat.cpp
-                                extensions/fstext/fstext.cpp
-                                extensions/gmm/gmm.cpp
-                                extensions/hmm/hmm.cpp
-                                extensions/itf/itf.cpp
-                                extensions/ivector/ivector.cpp
-                                extensions/kws/kws.cpp
-                                extensions/lat/lat.cpp
-                                extensions/lm/lm.cpp
-                                extensions/online/online.cpp
-                                extensions/online2/online2.cpp
-                                extensions/matrix/matrix.cpp
-                                extensions/transform/transform.cpp
-                                extensions/tree/tree.cpp
-                                extensions/util/util.cpp
-                                )
-    target_link_libraries(_kalpy PUBLIC kaldi-base
-                                        kaldi-matrix
-                                        kaldi-hmm
-                                        kaldi-online kaldi-online2
-                                        kaldi-kws
-                                        kaldi-decoder
-                                        kaldi-lat
-                                        kaldi-ivector kaldi-lm
-                                        kaldi-fstext kaldi-feat
-                                        kaldi-transform kaldi-gmm
-                                        kaldi-tree
-                                        kaldi-util
-                                        fst
-                                        fstscript
-                                        )
-
 endif()
 
 if(MSVC)
 set_target_properties(_kalpy PROPERTIES
     DEFINE_SYMBOL "KALDI_DLL_IMPORTS"
-                #"KALDI_CUMATRIX_DLL_IMPORTS"
+                "KALDI_CUMATRIX_DLL_IMPORTS"
                 "KALDI_UTIL_DLL_IMPORTS")
 endif(MSVC)
