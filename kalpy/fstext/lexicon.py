@@ -837,8 +837,64 @@ class LexiconCompiler:
         word_begin_symbol = self.phone_table.find(self.word_begin_label)
         word_end_symbol = self.phone_table.find(self.word_end_label)
         text = " ".join(self.word_table.find(x) for x in word_symbols)
-        acceptor = pynini.accep(text, token_type=self.word_table)
-        phone_to_word = pynini.compose(self.align_fst, acceptor)
+        if transcription:
+            if len(word_symbols) > 1:
+                text, final_word = text.rsplit(maxsplit=1)
+            else:
+                final_word = text
+        phone_to_word = pynini.compose(
+            self.align_fst, pynini.accep(text, token_type=self.word_table)
+        )
+        if transcription:
+            final_word_phone_to_word = pynini.compose(
+                self.align_fst, pynini.accep(final_word, token_type=self.word_table)
+            )
+            infinity_weight = pywrapfst.Weight(final_word_phone_to_word.weight_type(), "infinity")
+            final_word_phone_to_word = pynini.determinize(final_word_phone_to_word)
+            final_states = []
+            for i in range(final_word_phone_to_word.num_states()):
+                if final_word_phone_to_word.final(i) != infinity_weight:
+                    final_states.append(i)
+                else:
+                    final_word_phone_to_word.set_final(
+                        i, pywrapfst.Weight.one(final_word_phone_to_word.weight_type())
+                    )
+            extra_state = final_word_phone_to_word.add_state()
+            final_word_phone_to_word.set_final(
+                extra_state, pywrapfst.Weight.one(final_word_phone_to_word.weight_type())
+            )
+            for state in final_states:
+                final_word_phone_to_word.add_arc(
+                    state,
+                    pywrapfst.Arc(
+                        word_begin_symbol,
+                        self.phone_table.find("<eps>"),
+                        pywrapfst.Weight(final_word_phone_to_word.weight_type(), 10),
+                        extra_state,
+                    ),
+                )
+            for i in range(self.phone_table.num_symbols()):
+                if self.phone_table.find(i) == "<eps>":
+                    continue
+                if self.phone_table.find(i).startswith(self.silence_phone):
+                    continue
+                if self.phone_table.find(i).startswith("#"):
+                    continue
+
+                final_word_phone_to_word.add_arc(
+                    extra_state,
+                    pywrapfst.Arc(
+                        i,
+                        self.phone_table.find("<eps>"),
+                        pywrapfst.Weight(final_word_phone_to_word.weight_type(), 10),
+                        extra_state,
+                    ),
+                )
+            if len(word_symbols) > 1:
+                phone_to_word = pynini.concat(phone_to_word, final_word_phone_to_word)
+            else:
+                phone_to_word = final_word_phone_to_word
+
         phone_fst = pynini.Fst()
         current_state = phone_fst.add_state()
         phone_fst.set_start(current_state)
@@ -851,36 +907,8 @@ class LexiconCompiler:
                 ),
             )
             current_state = next_state
-        if transcription:
-            if phone_symbols[-1] == self.phone_table.find(self.silence_phone):
-                state = current_state - 1
-            else:
-                state = current_state
-            phone_to_word_state = phone_to_word.num_states() - 1
-            for i in range(self.phone_table.num_symbols()):
-                if self.phone_table.find(i) == "<eps>":
-                    continue
-                if self.phone_table.find(i).startswith("#"):
-                    continue
-                phone_fst.add_arc(
-                    state,
-                    pywrapfst.Arc(
-                        self.phone_table.find("<eps>"),
-                        i,
-                        pywrapfst.Weight.one(phone_fst.weight_type()),
-                        state,
-                    ),
-                )
+        phone_fst.set_final(current_state, pywrapfst.Weight.one(phone_fst.weight_type()))
 
-                phone_to_word.add_arc(
-                    phone_to_word_state,
-                    pywrapfst.Arc(
-                        i,
-                        self.phone_table.find("<eps>"),
-                        pywrapfst.Weight.one(phone_fst.weight_type()),
-                        phone_to_word_state,
-                    ),
-                )
         for s in range(current_state + 1):
             phone_fst.add_arc(
                 s,
@@ -900,9 +928,12 @@ class LexiconCompiler:
                     s,
                 ),
             )
-
-        phone_fst.set_final(current_state, pywrapfst.Weight.one(phone_fst.weight_type()))
         phone_fst.arcsort("olabel")
+        if transcription:
+            inf_weight = pywrapfst.Weight(phone_fst.weight_type(), "infinity")
+            for state in range(phone_fst.num_states()):
+                if phone_fst.final(state) != inf_weight:
+                    phone_fst.set_final(state, pywrapfst.Weight(phone_fst.weight_type(), 100))
 
         lattice = pynini.compose(phone_fst, phone_to_word)
 
@@ -956,6 +987,8 @@ class LexiconCompiler:
         current_phone_index = 0
         current_word_index = 0
         for i, w in enumerate(actual_words):
+            if current_word_index >= len(word_splits):
+                break
             pron = word_splits[current_word_index]
             word_symbol = word_symbols[i]
             if pron == self.silence_phone:
@@ -968,19 +1001,21 @@ class LexiconCompiler:
                 )
                 current_word_index += 1
                 current_phone_index += 1
+                if current_word_index >= len(word_splits):
+                    break
                 pron = word_splits[current_word_index]
-
-            phones = pron.split()
-            word_intervals.append(
-                WordCtmInterval(
-                    w,
-                    word_symbol,
-                    intervals[current_phone_index : current_phone_index + len(phones)],
+            if pron:
+                phones = pron.split()
+                word_intervals.append(
+                    WordCtmInterval(
+                        w,
+                        word_symbol,
+                        intervals[current_phone_index : current_phone_index + len(phones)],
+                    )
                 )
-            )
-            current_phone_index += len(phones)
+                current_phone_index += len(phones)
             current_word_index += 1
-        if current_word_index != len(word_splits):
+        if current_word_index < len(word_splits):
             pron = word_splits[current_word_index]
             if pron == self.silence_phone:
                 word_intervals.append(
@@ -990,6 +1025,8 @@ class LexiconCompiler:
                         intervals[current_phone_index : current_phone_index + 1],
                     )
                 )
+        if not word_intervals[-1].phones:
+            del word_intervals[-1]
         return HierarchicalCtm(word_intervals, text=text)
 
 
