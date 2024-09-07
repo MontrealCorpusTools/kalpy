@@ -28,7 +28,7 @@ class Segment:
     """
 
     file_path: str
-    begin: typing.Optional[float] = None
+    begin: typing.Optional[float] = 0.0
     end: typing.Optional[float] = None
     channel: typing.Optional[int] = 0
 
@@ -46,6 +46,8 @@ class Segment:
         if len(y.shape) > 1:
             channel = 0 if self.channel is None else self.channel
             y = y[channel, :]
+        if duration is None:
+            self.end = y.shape[0] / 16_000
         return y
 
     @property
