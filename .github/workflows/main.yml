@@ -19,7 +19,6 @@ jobs:
         include:
           - os: ubuntu-latest
             label: linux-64
-            prefix: /usr/share/miniconda3/envs/my-env
 
           #- os: macos-latest
           #  label: osx-64
@@ -37,17 +36,15 @@ jobs:
           fetch-depth: 0
 
       - name: Install Conda environment with Micromamba
-        uses: mamba-org/setup-micromamba@v1
+        uses: conda-incubator/setup-miniconda@v3
         with:
           environment-file: environment.yml
-          environment-name: my-env
-          create-args: >-
-            python=3.10
-          cache-environment: true
+          activate-environment: kalpy_build
+          miniforge-version: latest
 
       - name: Build kalpy
         env:
-          KALDI_ROOT: ~/micromamba/envs/my-env
+          KALDI_ROOT: ~/miniconda3/envs/kalpy_build
         shell: bash -l {0}
         run: pip install .
 

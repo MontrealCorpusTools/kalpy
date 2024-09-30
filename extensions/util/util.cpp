@@ -69,10 +69,27 @@ void pybind_arg(py::module& m, Opt& opt) {
           py::arg("name"), py::arg("arg"), py::arg("doc"));
 }
 
+
 }  // namespace
 
 void init_util(py::module &_m) {
   py::module m = _m.def_submodule("util", "util pybind for Kaldi");
+
+
+    PYBIND11_CONSTINIT static py::gil_safe_call_once_and_store<py::object> exc_storage;
+
+    exc_storage.call_once_and_store_result(
+        [&]() { return py::exception<KaldiFatalError>(m, "KaldiFatalError"); });
+
+    py::register_exception_translator([](std::exception_ptr p) {
+        try {
+            if (p) std::rethrow_exception(p);
+        } catch (const KaldiFatalError &e) {
+            py::set_error(exc_storage.get_stored(), e.KaldiMessage());
+        }
+    });
+  //py::register_exception<KaldiFatalError>(m, "PyKaldiFatalError", PyExc_RuntimeError);
+  //py::register_local_exception<KaldiFatalError>(m, "PyKaldiFatalError", PyExc_RuntimeError);
   pybind_basic_vector_holder<int32>(m, "IntVectorHolder");
   py::class_<std::istream>(m, "istream");
   {

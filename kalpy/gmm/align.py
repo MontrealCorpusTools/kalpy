@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import logging
 import pathlib
+import sys
+import traceback
 import typing
 
 from _kalpy.fstext import VectorFst
@@ -101,15 +103,21 @@ class GmmAligner:
             except KeyError:
                 logger.warning(f"Skipping {utterance_id} due to missing training graph")
                 continue
-            alignment = self.align_utterance(training_graph, feats, utterance_id)
-            if alignment is None:
-                yield utterance_id, None
-                num_error += 1
-                continue
-            yield alignment
-            total_likelihood += alignment.likelihood
-            total_frames += len(alignment.alignment)
-            num_done += 1
+            try:
+                alignment = self.align_utterance(training_graph, feats, utterance_id)
+                if alignment is None:
+                    yield utterance_id, None
+                    num_error += 1
+                    continue
+                yield alignment
+                total_likelihood += alignment.likelihood
+                total_frames += len(alignment.alignment)
+                num_done += 1
+            except Exception as e:
+                exc_type, exc_value, exc_traceback = sys.exc_info()
+                logger.warning(f"Error on {utterance_id}: {e}")
+                traceback_lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
+                logger.debug("\n".join(traceback_lines))
         if total_frames:
             logger.info(
                 f"Overall log-likelihood per frame is {total_likelihood / total_frames} over {total_frames} frames."
@@ -153,6 +161,8 @@ class GmmAligner:
                     likelihood_writer.Write(
                         str(alignment.utterance_id), alignment.per_frame_likelihoods
                     )
+        except Exception as e:
+            logger.error(e)
         finally:
             writer.Close()
             if word_writer is not None:
