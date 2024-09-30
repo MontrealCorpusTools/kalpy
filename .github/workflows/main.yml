@@ -40,11 +40,12 @@ jobs:
         uses: conda-incubator/setup-miniconda@v3
         with:
           environment-file: environment.yml
+          activate-environment: kalpy_build
           miniforge-version: latest
 
       - name: Build kalpy
         env:
-          KALDI_ROOT: ~/micromamba/envs/my-env
+          KALDI_ROOT: $CONDA/envs/kalpy_build
         shell: bash -l {0}
         run: pip install .
 
