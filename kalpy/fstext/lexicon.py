@@ -301,7 +301,7 @@ class LexiconCompiler:
         for pron in self.pronunciations:
 
             phones = pron.pronunciation.split()
-            while phones:
+            while len(phones) > 0:
                 subsequences.add(" ".join(phones))
                 phones = phones[:-1]
         last_used = collections.defaultdict(int)
