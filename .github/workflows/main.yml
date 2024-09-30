@@ -37,13 +37,10 @@ jobs:
           fetch-depth: 0
 
       - name: Install Conda environment with Micromamba
-        uses: mamba-org/setup-micromamba@v1
+        uses: conda-incubator/setup-miniconda@v3
         with:
           environment-file: environment.yml
-          environment-name: my-env
-          create-args: >-
-            python=3.10
-          cache-environment: true
+          miniforge-version: latest
 
       - name: Build kalpy
         env:
