@@ -104,6 +104,7 @@ class GmmAligner:
                 logger.warning(f"Skipping {utterance_id} due to missing training graph")
                 continue
             try:
+                logger.debug(f"Processing {utterance_id}")
                 alignment = self.align_utterance(training_graph, feats, utterance_id)
                 if alignment is None:
                     yield utterance_id, None
