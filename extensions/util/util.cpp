@@ -79,7 +79,7 @@ void init_util(py::module &_m) {
     PYBIND11_CONSTINIT static py::gil_safe_call_once_and_store<py::object> exc_storage;
 
     exc_storage.call_once_and_store_result(
-        [&]() { return py::exception<KaldiFatalError>(m, "KaldiFatalError"); });
+        [&]() { return py::exception<KaldiFatalError>(m, "KaldiFatalError", PyExc_RuntimeError); });
 
     py::register_exception_translator([](std::exception_ptr p) {
         try {
@@ -88,8 +88,7 @@ void init_util(py::module &_m) {
             py::set_error(exc_storage.get_stored(), e.KaldiMessage());
         }
     });
-  //py::register_exception<KaldiFatalError>(m, "PyKaldiFatalError", PyExc_RuntimeError);
-  //py::register_local_exception<KaldiFatalError>(m, "PyKaldiFatalError", PyExc_RuntimeError);
+
   pybind_basic_vector_holder<int32>(m, "IntVectorHolder");
   py::class_<std::istream>(m, "istream");
   {
