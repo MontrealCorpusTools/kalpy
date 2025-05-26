@@ -94,7 +94,6 @@ xref_links = {
         "https://github.com/MontrealCorpusTools/Montreal-Forced-Aligner/issues",
     ),
     "memcauliffe.com": ("Michael McAuliffe's blog", "https://memcauliffe.com"),
-    "@wavable": ("@wavable", "https://twitter.com/wavable"),
     "sonderegger": ("Morgan Sonderegger", "http://people.linguistics.mcgill.ca/~morgan/"),
     "wagner": ("Michael Wagner", "https://prosodylab.org/"),
     "coles": ("Arlie Coles", "https://a-coles.github.io/"),

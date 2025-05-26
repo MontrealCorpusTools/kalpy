@@ -8,9 +8,9 @@ import traceback
 import typing
 
 from _kalpy.fstext import VectorFst
-from _kalpy.gmm import gmm_align_compiled
+from _kalpy.gmm import gmm_align_compiled, gmm_align_reference_phones
 from _kalpy.matrix import FloatMatrix
-from _kalpy.util import BaseFloatVectorWriter, Int32VectorWriter
+from _kalpy.util import BaseFloatVectorWriter, Int32VectorWriter, RandomAccessInt32VectorReader
 from kalpy.decoder.data import FstArchive
 from kalpy.feat.data import FeatureArchive
 from kalpy.gmm.data import Alignment
@@ -55,31 +55,81 @@ class GmmAligner:
         if self.beam >= self.retry_beam:
             self.retry_beam = 4 * self.beam
 
-    def boost_silence(self, silence_weight: float, silence_phones: typing.List[int]):
-        self.acoustic_model.boost_silence(self.transition_model, silence_phones, silence_weight)
+    def boost_silence(
+        self, silence_weight: float, silence_phones: typing.List[int], only_silence: bool = True
+    ):
+        if only_silence:
+            self.acoustic_model.boost_only_silence(
+                self.transition_model, silence_phones, silence_weight
+            )
+        else:
+            self.acoustic_model.boost_silence(
+                self.transition_model, silence_phones, silence_weight
+            )
 
     def align_utterance(
-        self, training_graph: VectorFst, features: FloatMatrix, utterance_id: str = None
+        self,
+        training_graph: VectorFst,
+        features: FloatMatrix,
+        utterance_id: str = None,
+        reference_phones: typing.List[int] = None,
     ) -> typing.Optional[Alignment]:
-        (
-            alignment,
-            words,
-            likelihood,
-            per_frame_log_likelihoods,
-            successful,
-            retried,
-        ) = gmm_align_compiled(
-            self.transition_model,
-            self.acoustic_model,
-            training_graph,
-            features,
-            acoustic_scale=self.acoustic_scale,
-            transition_scale=self.transition_scale,
-            self_loop_scale=self.self_loop_scale,
-            beam=self.beam,
-            retry_beam=self.retry_beam,
-            careful=self.careful,
-        )
+        if not reference_phones:
+            (
+                alignment,
+                words,
+                likelihood,
+                per_frame_log_likelihoods,
+                successful,
+                retried,
+            ) = gmm_align_compiled(
+                self.transition_model,
+                self.acoustic_model,
+                training_graph,
+                features,
+                acoustic_scale=self.acoustic_scale,
+                transition_scale=self.transition_scale,
+                self_loop_scale=self.self_loop_scale,
+                beam=self.beam,
+                retry_beam=self.retry_beam,
+                careful=self.careful,
+            )
+        else:
+            logger.debug(f"Using reference phones in alignment for {utterance_id}")
+            assert len(reference_phones) == features.NumRows()
+            (
+                alignment,
+                words,
+                likelihood,
+                per_frame_log_likelihoods,
+                successful,
+                retried,
+            ) = gmm_align_reference_phones(
+                self.transition_model,
+                self.acoustic_model,
+                training_graph,
+                features,
+                reference_phones,
+                acoustic_scale=self.acoustic_scale,
+                transition_scale=self.transition_scale,
+                self_loop_scale=self.self_loop_scale,
+                beam=self.beam,
+                retry_beam=self.retry_beam,
+                careful=self.careful,
+            )
+            if successful:
+                alignment_phones = [
+                    self.transition_model.TransitionIdToPhone(x) for x in alignment
+                ]
+                if not len(reference_phones) == len(alignment):
+                    logger.debug(
+                        f"Mismatched alignment and reference length: {len(alignment)} vs {len(reference_phones)}"
+                    )
+                for i in range(len(reference_phones)):
+                    if alignment_phones[i] != reference_phones[i] and reference_phones[i] >= 0:
+                        logger.debug(
+                            f"Mismatch in frame {i}! {alignment_phones[i]} should be {reference_phones[i]}"
+                        )
         if not successful:
             return None
         if retried and utterance_id:
@@ -87,7 +137,10 @@ class GmmAligner:
         return Alignment(utterance_id, alignment, words, likelihood, per_frame_log_likelihoods)
 
     def align_utterances(
-        self, training_graph_archive: FstArchive, feature_archive: FeatureArchive
+        self,
+        training_graph_archive: FstArchive,
+        feature_archive: FeatureArchive,
+        reference_phone_archive: RandomAccessInt32VectorReader = None,
     ) -> typing.Generator[Alignment]:
         logger.debug(f"Aligning with {self.acoustic_model_path}")
         num_done = 0
@@ -103,9 +156,16 @@ class GmmAligner:
             except KeyError:
                 logger.warning(f"Skipping {utterance_id} due to missing training graph")
                 continue
+
+            reference_phones = None
+            if reference_phone_archive is not None:
+                if reference_phone_archive.HasKey(utterance_id):
+                    reference_phones = reference_phone_archive.Value(utterance_id)
             try:
                 logger.debug(f"Processing {utterance_id}")
-                alignment = self.align_utterance(training_graph, feats, utterance_id)
+                alignment = self.align_utterance(
+                    training_graph, feats, utterance_id, reference_phones
+                )
                 if alignment is None:
                     yield utterance_id, None
                     num_error += 1
@@ -130,6 +190,7 @@ class GmmAligner:
         file_name: typing.Union[pathlib.Path, str],
         training_graph_archive: FstArchive,
         feature_archive: FeatureArchive,
+        reference_phone_archive: RandomAccessInt32VectorReader = None,
         word_file_name: typing.Union[pathlib.Path, str] = None,
         likelihood_file_name: typing.Union[pathlib.Path, str] = None,
         write_scp: bool = False,
@@ -146,7 +207,11 @@ class GmmAligner:
             likelihood_write_specifier = generate_write_specifier(likelihood_file_name, write_scp)
             likelihood_writer = BaseFloatVectorWriter(likelihood_write_specifier)
         try:
-            for alignment in self.align_utterances(training_graph_archive, feature_archive):
+            for alignment in self.align_utterances(
+                training_graph_archive,
+                feature_archive,
+                reference_phone_archive=reference_phone_archive,
+            ):
                 if alignment is None:
                     continue
                 if isinstance(alignment, tuple):
@@ -164,6 +229,7 @@ class GmmAligner:
                     )
         except Exception as e:
             logger.error(e)
+            raise
         finally:
             writer.Close()
             if word_writer is not None:

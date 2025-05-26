@@ -31,6 +31,7 @@ from _kalpy.lat import (
 )
 from _kalpy.matrix import FloatVector
 from _kalpy.util import (
+    Interval,
     RandomAccessBaseFloatVectorReader,
     RandomAccessInt32VectorReader,
     SequentialBaseFloatVectorReader,
@@ -86,6 +87,9 @@ class CtmInterval:
         """
         if self.end < -1 or self.begin == 1000000:
             raise CtmError(self)
+
+    def to_kalpy_interval(self):
+        return Interval(self.begin, self.end, self.label)
 
     def to_tg_interval(self, file_duration=None) -> Interval:
         """

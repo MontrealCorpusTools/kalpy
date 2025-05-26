@@ -19,6 +19,59 @@ using namespace kaldi;
 
 namespace {
 
+struct Interval {
+    Interval(const float &begin, const float &end, const std::string &label) : begin(begin), end(end), label(label) { }
+    Interval() : begin(0.0), end(0.0), label("-") { }
+    void setLabel(const std::string &label_) { label = label_; }
+    const std::string &getLabel() const { return label; }
+    void setBegin(const float &begin_) { begin = begin_; }
+    const float &getBegin() const { return begin; }
+    void setEnd(const float &end_) { end = end_; }
+    const float &getEnd() const { return end; }
+
+    float compare_labels(const std::string &other_label, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const{
+        if (label == other_label){
+            return 0.0;
+        }
+        else if (label == silence_phone || other_label == silence_phone){
+            return 10.0;
+        }
+        std::map<std::string, std::set<std::string>>::const_iterator pos = mapping.find(other_label);
+        if (pos != mapping.end() && pos->second.find(label) != pos->second.end()){
+            return 0.0;
+        }
+        return 2.0;
+    }
+
+    float score(const Interval &other_interval, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const{
+        float begin_diff = std::abs(begin - other_interval.begin);
+        float end_diff = std::abs(end - other_interval.end);
+        float label_diff = compare_labels(other_interval.label, silence_phone, mapping);
+        return begin_diff + end_diff + label_diff;
+    }
+
+    std::string label;
+    float begin;
+    float end;
+};
+
+struct Alignment {
+    Alignment(const std::vector<Interval> &reference, const std::vector<Interval> &test, const float &score) : reference(reference), test(test), score(score) { }
+
+    void setReference(const std::vector<Interval> &reference_) { reference = reference_; }
+    const std::vector<Interval> &getReference() const { return reference; }
+
+    void setTest(const std::vector<Interval> &test_) { test = test_; }
+    const std::vector<Interval> &getTest() const { return test; }
+
+    void setScore(const float &score_) { score = score_; }
+    const float &getScore() const { return score; }
+
+    std::vector<Interval> reference;
+    std::vector<Interval> test;
+    float score;
+};
+
 void ignore_logs(const LogMessageEnvelope &envelope,
                            const char *message){
                            }
@@ -281,5 +334,103 @@ void init_util(py::module &_m) {
     pybind_read_kaldi_object<MatrixBase<float>>(m);
     pybind_read_kaldi_object<MatrixBase<double>>(m);
     pybind_read_kaldi_object<ConstArpaLm>(m);
+
+    py::class_<Interval>(m, "Interval")
+        .def(py::init<const float &, const float &, const std::string &>(),
+        py::arg("begin"),
+        py::arg("end"),
+        py::arg("label"))
+        .def("setLabel", &Interval::setLabel,
+            py::arg("label"))
+        .def("getLabel", &Interval::getLabel)
+        .def("setBegin", &Interval::setBegin,
+            py::arg("begin"))
+        .def("getBegin", &Interval::getBegin)
+        .def("setEnd", &Interval::setEnd,
+            py::arg("end"))
+        .def("getEnd", &Interval::getEnd)
+        .def("compare_labels", &Interval::compare_labels,
+            py::arg("other_label"),
+            py::arg("silence_phone"),
+            py::arg("mapping"))
+        .def("score", &Interval::score,
+            py::arg("other_interval"),
+            py::arg("silence_phone"),
+            py::arg("mapping"));
+
+    m.def("align_intervals",
+          [](const std::vector<Interval> &reference_intervals,
+            const std::vector<Interval> &hypothesis_intervals,
+            const std::string &silence_phone,
+            const std::map<std::string, std::set<std::string>> &mapping){
+
+            py::gil_scoped_release release;
+            std::vector<std::pair<Interval, Interval> > output;
+            Interval eps_interval = Interval(0.0, 0.0, "-");
+            // This is very memory-inefficiently implemented using a vector of vectors.
+            size_t M = reference_intervals.size(), N = hypothesis_intervals.size();
+            size_t m, n;
+            std::vector<std::vector<float> > e(M+1);
+            for (m = 0; m <=M; m++) e[m].resize(N+1);
+            for (n = 0; n <= N; n++)
+              e[0][n]  = n;
+            for (m = 1; m <= M; m++) {
+              e[m][0] = e[m-1][0] + 1;
+              for (n = 1; n <= N; n++) {
+                float sub_or_ok = e[m-1][n-1] + reference_intervals[m-1].score(hypothesis_intervals[n-1], silence_phone, mapping);
+                float del = e[m-1][n] + 1.0;  // assumes a == ref, b == hyp.
+                float ins = e[m][n-1] + 1.0;
+                e[m][n] = std::min(sub_or_ok, std::min(del, ins));
+              }
+            }
+            // get time-reversed output first: trace back.
+            m = M;
+            n = N;
+            while (m != 0 || n != 0) {
+              size_t last_m, last_n;
+              if (m == 0) {
+                last_m = m;
+                last_n = n-1;
+              } else if (n == 0) {
+                last_m = m-1;
+                last_n = n;
+              } else {
+                float sub_or_ok = e[m-1][n-1] + reference_intervals[m-1].score(hypothesis_intervals[n-1], silence_phone, mapping);
+                float del = e[m-1][n] + 1.0;  // assumes a == ref, b == hyp.
+                float ins = e[m][n-1] + 1.0;
+                // choose sub_or_ok if all else equal.
+                if (sub_or_ok <= std::min(del, ins)) {
+                  last_m = m-1;
+                  last_n = n-1;
+                } else {
+                  if (del <= ins) {  // choose del over ins if equal.
+                    last_m = m-1;
+                    last_n = n;
+                  } else {
+                    last_m = m;
+                    last_n = n-1;
+                  }
+                }
+              }
+              Interval a_sym, b_sym;
+              a_sym = (last_m == m ? eps_interval : reference_intervals[last_m]);
+              b_sym = (last_n == n ? eps_interval : hypothesis_intervals[last_n]);
+              output.push_back(std::make_pair(a_sym, b_sym));
+              m = last_m;
+              n = last_n;
+            }
+            size_t sz = output.size();
+            for (size_t i = 0; i < sz/2; i++)
+              std::swap( output[i], output[sz-1-i]);
+            py::gil_scoped_acquire gil_acquire;
+            return py::make_tuple(e[M][N], output);
+
+                         },
+          py::arg("reference_intervals"),
+          py::arg("hypothesis_intervals"),
+          py::arg("silence_phone"),
+          py::arg("mapping"),
+          py::return_value_policy::take_ownership
+          );
 
 }

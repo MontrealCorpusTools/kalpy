@@ -739,7 +739,7 @@ void pybind_transition_model(py::module &m) {
 {
   using PyClass = TransitionModel;
   py::class_<PyClass, TransitionInformation>(m, "TransitionModel")
-      .def(py::init<>())
+     .def(py::init<>())
       .def(py::init<const ContextDependencyInterface&, const HmmTopology&>(),
            "Initialize the object [e.g. at the start of training]. The class "
            "keeps a copy of the HmmTopology object, but not the "
@@ -781,8 +781,14 @@ void pybind_transition_model(py::module &m) {
            "TransitionIdToPdfFast is as TransitionIdToPdf but skips an "
            "assertion (unless we're in paranoid mode).",
            py::arg("trans_id"))
+     .def("TransitionIdToPhone", &PyClass::TransitionIdToPhone,
+          py::arg("trans_id"))
+     .def("TransitionIdToPdfArray", &PyClass::TransitionIdToPdfArray)
       .def("TransitionIdToPdfClass", &PyClass::TransitionIdToPdfClass,
            py::arg("trans_id"))
+      .def("TransitionIdsEquivalent", &PyClass::TransitionIdsEquivalent,
+           py::arg("trans_id1"),
+           py::arg("trans_id2"))
       .def("TransitionIdToHmmState", &PyClass::TransitionIdToHmmState,
            py::arg("trans_id"))
       .def("IsFinal", &PyClass::IsFinal,
