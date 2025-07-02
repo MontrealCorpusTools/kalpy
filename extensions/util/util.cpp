@@ -861,7 +861,7 @@ void init_util(py::module &_m) {
                          py::keep_alive<0, 1>() /* Essential: keep object alive while iterator exists */);
 
     m.def("align_intervals",
-          align_intervals<Interval>,
+          &align_intervals<Interval>,
           "Align intervals based on how much they overlap and their label, with the ability to specify a custom mapping for "
     "different labels to be scored as if they're the same",
           py::arg("reference_intervals"),
@@ -872,7 +872,7 @@ void init_util(py::module &_m) {
           );
 
     m.def("align_intervals",
-          align_intervals<CtmInterval>,
+          &align_intervals<CtmInterval>,
           "Align intervals based on how much they overlap and their label, with the ability to specify a custom mapping for "
     "different labels to be scored as if they're the same",
           py::arg("reference_intervals"),
@@ -883,7 +883,7 @@ void init_util(py::module &_m) {
           );
 
     m.def("align_intervals",
-          align_intervals<WordCtmInterval>,
+          &align_intervals<WordCtmInterval>,
           "Align intervals based on how much they overlap and their label, with the ability to specify a custom mapping for "
     "different labels to be scored as if they're the same",
           py::arg("reference_intervals"),
