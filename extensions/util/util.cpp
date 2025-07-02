@@ -230,11 +230,81 @@ struct IntervalAlignment {
       return test;
     }
 
-    const size_t &getLength() const { return alignment.size(); }
+    const size_t getLength() const { return alignment.size(); }
 
     std::vector<std::pair<IntervalType, IntervalType>> alignment;
     float score;
 };
+
+template<typename IntervalType>
+IntervalAlignment<IntervalType> align_intervals(
+  const std::vector<IntervalType> &reference_intervals,
+  const std::vector<IntervalType> &hypothesis_intervals,
+  const std::string &silence_phone,
+  const std::map<std::string, std::set<std::string>> &mapping) {
+
+            py::gil_scoped_release release;
+            std::vector<std::pair<IntervalType, IntervalType> > output;
+            IntervalType eps_interval = IntervalType();
+            // This is very memory-inefficiently implemented using a vector of vectors.
+            size_t M = reference_intervals.size(), N = hypothesis_intervals.size();
+            size_t m, n;
+            std::vector<std::vector<float> > e(M+1);
+            for (m = 0; m <=M; m++) e[m].resize(N+1);
+            for (n = 0; n <= N; n++)
+              e[0][n]  = n;
+            for (m = 1; m <= M; m++) {
+              e[m][0] = e[m-1][0] + 1;
+              for (n = 1; n <= N; n++) {
+                float sub_or_ok = e[m-1][n-1] + reference_intervals[m-1].calculate_score(hypothesis_intervals[n-1], silence_phone, mapping);
+                float del = e[m-1][n] + 1.0;  // assumes a == ref, b == hyp.
+                float ins = e[m][n-1] + 1.0;
+                e[m][n] = std::min(sub_or_ok, std::min(del, ins));
+              }
+            }
+            // get time-reversed output first: trace back.
+            m = M;
+            n = N;
+            while (m != 0 || n != 0) {
+              size_t last_m, last_n;
+              if (m == 0) {
+                last_m = m;
+                last_n = n-1;
+              } else if (n == 0) {
+                last_m = m-1;
+                last_n = n;
+              } else {
+                float sub_or_ok = e[m-1][n-1] + reference_intervals[m-1].calculate_score(hypothesis_intervals[n-1], silence_phone, mapping);
+                float del = e[m-1][n] + 1.0;  // assumes a == ref, b == hyp.
+                float ins = e[m][n-1] + 1.0;
+                // choose sub_or_ok if all else equal.
+                if (sub_or_ok <= std::min(del, ins)) {
+                  last_m = m-1;
+                  last_n = n-1;
+                } else {
+                  if (del <= ins) {  // choose del over ins if equal.
+                    last_m = m-1;
+                    last_n = n;
+                  } else {
+                    last_m = m;
+                    last_n = n-1;
+                  }
+                }
+              }
+              IntervalType a_sym, b_sym;
+              a_sym = (last_m == m ? eps_interval : reference_intervals[last_m]);
+              b_sym = (last_n == n ? eps_interval : hypothesis_intervals[last_n]);
+              output.push_back(std::make_pair(a_sym, b_sym));
+              m = last_m;
+              n = last_n;
+            }
+            size_t sz = output.size();
+            for (size_t i = 0; i < sz/2; i++)
+              std::swap( output[i], output[sz-1-i]);
+            py::gil_scoped_acquire gil_acquire;
+            return IntervalAlignment<IntervalType>(output, e[M][N]);
+
+                         }
 
 void ignore_logs(const LogMessageEnvelope &envelope,
                            const char *message){
@@ -791,73 +861,7 @@ void init_util(py::module &_m) {
                          py::keep_alive<0, 1>() /* Essential: keep object alive while iterator exists */);
 
     m.def("align_intervals",
-          [](const std::vector<Interval> &reference_intervals,
-            const std::vector<Interval> &hypothesis_intervals,
-            const std::string &silence_phone,
-            const std::map<std::string, std::set<std::string>> &mapping){
-
-            py::gil_scoped_release release;
-            std::vector<std::pair<Interval, Interval> > output;
-            Interval eps_interval = Interval(-1.0, -1.0, "-");
-            // This is very memory-inefficiently implemented using a vector of vectors.
-            size_t M = reference_intervals.size(), N = hypothesis_intervals.size();
-            size_t m, n;
-            std::vector<std::vector<float> > e(M+1);
-            for (m = 0; m <=M; m++) e[m].resize(N+1);
-            for (n = 0; n <= N; n++)
-              e[0][n]  = n;
-            for (m = 1; m <= M; m++) {
-              e[m][0] = e[m-1][0] + 1;
-              for (n = 1; n <= N; n++) {
-                float sub_or_ok = e[m-1][n-1] + reference_intervals[m-1].calculate_score(hypothesis_intervals[n-1], silence_phone, mapping);
-                float del = e[m-1][n] + 1.0;  // assumes a == ref, b == hyp.
-                float ins = e[m][n-1] + 1.0;
-                e[m][n] = std::min(sub_or_ok, std::min(del, ins));
-              }
-            }
-            // get time-reversed output first: trace back.
-            m = M;
-            n = N;
-            while (m != 0 || n != 0) {
-              size_t last_m, last_n;
-              if (m == 0) {
-                last_m = m;
-                last_n = n-1;
-              } else if (n == 0) {
-                last_m = m-1;
-                last_n = n;
-              } else {
-                float sub_or_ok = e[m-1][n-1] + reference_intervals[m-1].calculate_score(hypothesis_intervals[n-1], silence_phone, mapping);
-                float del = e[m-1][n] + 1.0;  // assumes a == ref, b == hyp.
-                float ins = e[m][n-1] + 1.0;
-                // choose sub_or_ok if all else equal.
-                if (sub_or_ok <= std::min(del, ins)) {
-                  last_m = m-1;
-                  last_n = n-1;
-                } else {
-                  if (del <= ins) {  // choose del over ins if equal.
-                    last_m = m-1;
-                    last_n = n;
-                  } else {
-                    last_m = m;
-                    last_n = n-1;
-                  }
-                }
-              }
-              Interval a_sym, b_sym;
-              a_sym = (last_m == m ? eps_interval : reference_intervals[last_m]);
-              b_sym = (last_n == n ? eps_interval : hypothesis_intervals[last_n]);
-              output.push_back(std::make_pair(a_sym, b_sym));
-              m = last_m;
-              n = last_n;
-            }
-            size_t sz = output.size();
-            for (size_t i = 0; i < sz/2; i++)
-              std::swap( output[i], output[sz-1-i]);
-            py::gil_scoped_acquire gil_acquire;
-            return IntervalAlignment<Interval>(output, e[M][N]);
-
-                         },
+          &align_intervals<Interval>,
           "Align intervals based on how much they overlap and their label, with the ability to specify a custom mapping for "
     "different labels to be scored as if they're the same",
           py::arg("reference_intervals"),
@@ -868,73 +872,7 @@ void init_util(py::module &_m) {
           );
 
     m.def("align_intervals",
-          [](const std::vector<CtmInterval> &reference_intervals,
-            const std::vector<CtmInterval> &hypothesis_intervals,
-            const std::string &silence_phone,
-            const std::map<std::string, std::set<std::string>> &mapping){
-
-            py::gil_scoped_release release;
-            std::vector<std::pair<CtmInterval, CtmInterval> > output;
-            CtmInterval eps_interval = CtmInterval(-1.0, -1.0, "-", -1);
-            // This is very memory-inefficiently implemented using a vector of vectors.
-            size_t M = reference_intervals.size(), N = hypothesis_intervals.size();
-            size_t m, n;
-            std::vector<std::vector<float> > e(M+1);
-            for (m = 0; m <=M; m++) e[m].resize(N+1);
-            for (n = 0; n <= N; n++)
-              e[0][n]  = n;
-            for (m = 1; m <= M; m++) {
-              e[m][0] = e[m-1][0] + 1;
-              for (n = 1; n <= N; n++) {
-                float sub_or_ok = e[m-1][n-1] + reference_intervals[m-1].calculate_score(hypothesis_intervals[n-1], silence_phone, mapping);
-                float del = e[m-1][n] + 1.0;  // assumes a == ref, b == hyp.
-                float ins = e[m][n-1] + 1.0;
-                e[m][n] = std::min(sub_or_ok, std::min(del, ins));
-              }
-            }
-            // get time-reversed output first: trace back.
-            m = M;
-            n = N;
-            while (m != 0 || n != 0) {
-              size_t last_m, last_n;
-              if (m == 0) {
-                last_m = m;
-                last_n = n-1;
-              } else if (n == 0) {
-                last_m = m-1;
-                last_n = n;
-              } else {
-                float sub_or_ok = e[m-1][n-1] + reference_intervals[m-1].calculate_score(hypothesis_intervals[n-1], silence_phone, mapping);
-                float del = e[m-1][n] + 1.0;  // assumes a == ref, b == hyp.
-                float ins = e[m][n-1] + 1.0;
-                // choose sub_or_ok if all else equal.
-                if (sub_or_ok <= std::min(del, ins)) {
-                  last_m = m-1;
-                  last_n = n-1;
-                } else {
-                  if (del <= ins) {  // choose del over ins if equal.
-                    last_m = m-1;
-                    last_n = n;
-                  } else {
-                    last_m = m;
-                    last_n = n-1;
-                  }
-                }
-              }
-              CtmInterval a_sym, b_sym;
-              a_sym = (last_m == m ? eps_interval : reference_intervals[last_m]);
-              b_sym = (last_n == n ? eps_interval : hypothesis_intervals[last_n]);
-              output.push_back(std::make_pair(a_sym, b_sym));
-              m = last_m;
-              n = last_n;
-            }
-            size_t sz = output.size();
-            for (size_t i = 0; i < sz/2; i++)
-              std::swap( output[i], output[sz-1-i]);
-            py::gil_scoped_acquire gil_acquire;
-            return IntervalAlignment<CtmInterval>(output, e[M][N]);
-
-                         },
+          &align_intervals<CtmInterval>,
           "Align intervals based on how much they overlap and their label, with the ability to specify a custom mapping for "
     "different labels to be scored as if they're the same",
           py::arg("reference_intervals"),
@@ -945,73 +883,7 @@ void init_util(py::module &_m) {
           );
 
     m.def("align_intervals",
-          [](const std::vector<WordCtmInterval> &reference_intervals,
-            const std::vector<WordCtmInterval> &hypothesis_intervals,
-            const std::string &silence_phone,
-            const std::map<std::string, std::set<std::string>> &mapping){
-
-            py::gil_scoped_release release;
-            std::vector<std::pair<WordCtmInterval, WordCtmInterval> > output;
-            WordCtmInterval eps_interval = WordCtmInterval();
-            // This is very memory-inefficiently implemented using a vector of vectors.
-            size_t M = reference_intervals.size(), N = hypothesis_intervals.size();
-            size_t m, n;
-            std::vector<std::vector<float> > e(M+1);
-            for (m = 0; m <=M; m++) e[m].resize(N+1);
-            for (n = 0; n <= N; n++)
-              e[0][n]  = n;
-            for (m = 1; m <= M; m++) {
-              e[m][0] = e[m-1][0] + 1;
-              for (n = 1; n <= N; n++) {
-                float sub_or_ok = e[m-1][n-1] + reference_intervals[m-1].calculate_score(hypothesis_intervals[n-1], silence_phone, mapping);
-                float del = e[m-1][n] + 1.0;  // assumes a == ref, b == hyp.
-                float ins = e[m][n-1] + 1.0;
-                e[m][n] = std::min(sub_or_ok, std::min(del, ins));
-              }
-            }
-            // get time-reversed output first: trace back.
-            m = M;
-            n = N;
-            while (m != 0 || n != 0) {
-              size_t last_m, last_n;
-              if (m == 0) {
-                last_m = m;
-                last_n = n-1;
-              } else if (n == 0) {
-                last_m = m-1;
-                last_n = n;
-              } else {
-                float sub_or_ok = e[m-1][n-1] + reference_intervals[m-1].calculate_score(hypothesis_intervals[n-1], silence_phone, mapping);
-                float del = e[m-1][n] + 1.0;  // assumes a == ref, b == hyp.
-                float ins = e[m][n-1] + 1.0;
-                // choose sub_or_ok if all else equal.
-                if (sub_or_ok <= std::min(del, ins)) {
-                  last_m = m-1;
-                  last_n = n-1;
-                } else {
-                  if (del <= ins) {  // choose del over ins if equal.
-                    last_m = m-1;
-                    last_n = n;
-                  } else {
-                    last_m = m;
-                    last_n = n-1;
-                  }
-                }
-              }
-              WordCtmInterval a_sym, b_sym;
-              a_sym = (last_m == m ? eps_interval : reference_intervals[last_m]);
-              b_sym = (last_n == n ? eps_interval : hypothesis_intervals[last_n]);
-              output.push_back(std::make_pair(a_sym, b_sym));
-              m = last_m;
-              n = last_n;
-            }
-            size_t sz = output.size();
-            for (size_t i = 0; i < sz/2; i++)
-              std::swap( output[i], output[sz-1-i]);
-            py::gil_scoped_acquire gil_acquire;
-            return IntervalAlignment<WordCtmInterval>(output, e[M][N]);
-
-                         },
+          &align_intervals<WordCtmInterval>,
           "Align intervals based on how much they overlap and their label, with the ability to specify a custom mapping for "
     "different labels to be scored as if they're the same",
           py::arg("reference_intervals"),
