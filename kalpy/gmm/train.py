@@ -33,11 +33,15 @@ class GmmStatsAccumulator:
         feature_archive: FeatureArchive,
         alignment_archive: AlignmentArchive,
         callback: typing.Callable = None,
+        ignored_keys: typing.Collection[str] = None,
     ):
         tot_like = 0.0
         tot_t = 0.0
         num_done = 0
         for utterance_id, feats in feature_archive:
+            if ignored_keys is not None and utterance_id in ignored_keys:
+                logger.warning(f"Ignoring {utterance_id}")
+                continue
             if feats.NumRows() == 0:
                 logger.warning(f"Skipping {utterance_id} due to zero-length features")
                 continue

@@ -1,3 +1,5 @@
+import pickle
+
 import numpy as np
 import pytest
 
@@ -31,6 +33,9 @@ def test_align(mono_tree_path, mono_model_path, dictionary_path, mono_temp_dir):
         assert alignment.per_frame_likelihoods.numpy().shape[0] == 2672
         ctm = alignment.generate_ctm(aligner.transition_model, lc.phone_table)
         assert len(ctm) == 243
+        ctm_data = pickle.dumps(ctm)
+        ctm_new = pickle.loads(ctm_data)
+        assert len(ctm_new) == 243
 
 
 @pytest.mark.order(3)

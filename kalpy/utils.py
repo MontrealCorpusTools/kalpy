@@ -23,14 +23,17 @@ def generate_read_specifier(file_name: typing.Union[str, pathlib.Path], sorted=T
 
 
 def generate_write_specifier(
-    file_name: typing.Union[str, pathlib.Path], write_scp: bool = False
+    file_name: typing.Union[str, pathlib.Path], write_scp: bool = False, text: bool = False
 ) -> str:
     file_name = str(file_name)
     if not file_name.endswith(".ark"):
         file_name += ".ark"
+    ark_prefix = "ark"
+    if text:
+        ark_prefix += ",t"
     if write_scp:
-        return f"ark,scp:{file_name},{file_name.replace('.ark', '.scp')}"
-    return f"ark:{file_name}"
+        return f"{ark_prefix},scp:{file_name},{file_name.replace('.ark', '.scp')}"
+    return f"{ark_prefix}:{file_name}"
 
 
 def write_kaldi_object(obj, path, binary=True):

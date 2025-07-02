@@ -10,7 +10,11 @@ import typing
 from _kalpy.fstext import VectorFst
 from _kalpy.gmm import gmm_align_compiled, gmm_align_reference_phones
 from _kalpy.matrix import FloatMatrix
-from _kalpy.util import BaseFloatVectorWriter, Int32VectorWriter, RandomAccessInt32VectorReader
+from _kalpy.util import (
+    BaseFloatVectorWriter,
+    Int32VectorWriter,
+    RandomAccessInt32VectorVectorReader,
+)
 from kalpy.decoder.data import FstArchive
 from kalpy.feat.data import FeatureArchive
 from kalpy.gmm.data import Alignment
@@ -72,9 +76,9 @@ class GmmAligner:
         training_graph: VectorFst,
         features: FloatMatrix,
         utterance_id: str = None,
-        reference_phones: typing.List[int] = None,
+        reference_phones: typing.List[typing.List[int]] = None,
     ) -> typing.Optional[Alignment]:
-        if not reference_phones:
+        if reference_phones is None:
             (
                 alignment,
                 words,
@@ -118,18 +122,54 @@ class GmmAligner:
                 careful=self.careful,
             )
             if successful:
+                redo = False
                 alignment_phones = [
                     self.transition_model.TransitionIdToPhone(x) for x in alignment
                 ]
-                if not len(reference_phones) == len(alignment):
+                if len(reference_phones) != len(alignment):
                     logger.debug(
                         f"Mismatched alignment and reference length: {len(alignment)} vs {len(reference_phones)}"
                     )
                 for i in range(len(reference_phones)):
-                    if alignment_phones[i] != reference_phones[i] and reference_phones[i] >= 0:
+                    if (
+                        alignment_phones[i] not in reference_phones[i]
+                        and -1 not in reference_phones[i]
+                    ):
                         logger.debug(
                             f"Mismatch in frame {i}! {alignment_phones[i]} should be {reference_phones[i]}"
                         )
+                        redo = True
+                        reference_phones[i].append(-1)
+                if redo:
+                    logger.debug(f"Redoing {utterance_id} with more lenient reference phones")
+                    (
+                        alignment,
+                        words,
+                        likelihood,
+                        per_frame_log_likelihoods,
+                        successful,
+                        retried,
+                    ) = gmm_align_reference_phones(
+                        self.transition_model,
+                        self.acoustic_model,
+                        training_graph,
+                        features,
+                        reference_phones,
+                        acoustic_scale=self.acoustic_scale,
+                        transition_scale=self.transition_scale,
+                        self_loop_scale=self.self_loop_scale,
+                        beam=self.beam,
+                        retry_beam=self.retry_beam,
+                        careful=self.careful,
+                    )
+                    for i in range(len(reference_phones)):
+                        if (
+                            alignment_phones[i] not in reference_phones[i]
+                            and -1 not in reference_phones[i]
+                        ):
+                            logger.debug(
+                                f"Mismatch in frame {i}! {alignment_phones[i]} should be {reference_phones[i]}"
+                            )
         if not successful:
             return None
         if retried and utterance_id:
@@ -140,7 +180,7 @@ class GmmAligner:
         self,
         training_graph_archive: FstArchive,
         feature_archive: FeatureArchive,
-        reference_phone_archive: RandomAccessInt32VectorReader = None,
+        reference_phone_archive: RandomAccessInt32VectorVectorReader = None,
     ) -> typing.Generator[Alignment]:
         logger.debug(f"Aligning with {self.acoustic_model_path}")
         num_done = 0
@@ -190,7 +230,7 @@ class GmmAligner:
         file_name: typing.Union[pathlib.Path, str],
         training_graph_archive: FstArchive,
         feature_archive: FeatureArchive,
-        reference_phone_archive: RandomAccessInt32VectorReader = None,
+        reference_phone_archive: RandomAccessInt32VectorVectorReader = None,
         word_file_name: typing.Union[pathlib.Path, str] = None,
         likelihood_file_name: typing.Union[pathlib.Path, str] = None,
         write_scp: bool = False,

@@ -21,15 +21,10 @@ namespace {
 
 struct Interval {
     Interval(const float &begin, const float &end, const std::string &label) : begin(begin), end(end), label(label) { }
-    Interval() : begin(0.0), end(0.0), label("-") { }
-    void setLabel(const std::string &label_) { label = label_; }
-    const std::string &getLabel() const { return label; }
-    void setBegin(const float &begin_) { begin = begin_; }
-    const float &getBegin() const { return begin; }
-    void setEnd(const float &end_) { end = end_; }
-    const float &getEnd() const { return end; }
+    Interval() : begin(-1.0), end(-1.0), label("-") { }
 
-    float compare_labels(const std::string &other_label, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const{
+
+    virtual float compare_labels(const std::string &other_label, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const{
         if (label == other_label){
             return 0.0;
         }
@@ -43,11 +38,13 @@ struct Interval {
         return 2.0;
     }
 
-    float score(const Interval &other_interval, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const{
-        float begin_diff = std::abs(begin - other_interval.begin);
-        float end_diff = std::abs(end - other_interval.end);
-        float label_diff = compare_labels(other_interval.label, silence_phone, mapping);
-        return begin_diff + end_diff + label_diff;
+    virtual float calculate_score(const Interval &other_interval, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const{
+        float score = compare_labels(other_interval.label, silence_phone, mapping);
+        if (begin >= 0.0 && end > 0.0){
+          score += std::abs(begin - other_interval.begin);
+          score += std::abs(end - other_interval.end);
+        }
+        return score;
     }
 
     std::string label;
@@ -55,22 +52,259 @@ struct Interval {
     float end;
 };
 
-struct Alignment {
-    Alignment(const std::vector<Interval> &reference, const std::vector<Interval> &test, const float &score) : reference(reference), test(test), score(score) { }
+struct PyInterval : Interval {
+    using Interval::Interval; // Inherit constructors
 
-    void setReference(const std::vector<Interval> &reference_) { reference = reference_; }
-    const std::vector<Interval> &getReference() const { return reference; }
+    float compare_labels(const std::string &other_label, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const override {
+      PYBIND11_OVERRIDE_PURE(float, Interval, compare_labels, other_label, silence_phone, mapping);
+    }
 
-    void setTest(const std::vector<Interval> &test_) { test = test_; }
-    const std::vector<Interval> &getTest() const { return test; }
+    float calculate_score(const Interval &other_interval, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const override {
+      PYBIND11_OVERRIDE_PURE(float, Interval, calculate_score, other_interval, silence_phone, mapping);
+    }
+};
 
-    void setScore(const float &score_) { score = score_; }
-    const float &getScore() const { return score; }
+struct CtmInterval {
+    CtmInterval(
+      const float &begin,
+      const float &end,
+      const std::string &label,
+      const int32 &symbol,
+      const float &confidence=0.0) : begin(begin), end(end), label(label), symbol(symbol), confidence(confidence) { }
+    CtmInterval(
+      const float &begin,
+      const float &end,
+      const std::string &label) : begin(begin), end(end), label(label), symbol(-1), confidence(0.0) { }
+    CtmInterval() : begin(-1.0), end(-1.0), label("-"), symbol(-1), confidence(0.0) { }
 
-    std::vector<Interval> reference;
-    std::vector<Interval> test;
+
+    virtual float compare_labels(const std::string &other_label, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const{
+        if (label == other_label){
+            return 0.0;
+        }
+        else if (label == silence_phone || other_label == silence_phone){
+            return 10.0;
+        }
+        std::map<std::string, std::set<std::string>>::const_iterator pos = mapping.find(other_label);
+        if (pos != mapping.end() && pos->second.find(label) != pos->second.end()){
+            return 0.0;
+        }
+        return 2.0;
+    }
+
+    virtual float calculate_score(const CtmInterval &other_interval, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const{
+        float score = compare_labels(other_interval.label, silence_phone, mapping);
+        if (begin >= 0.0 && end > 0.0){
+          score += std::abs(begin - other_interval.begin);
+          score += std::abs(end - other_interval.end);
+        }
+        return score;
+    }
+
+    std::string label;
+    float begin;
+    float end;
+    int32 symbol;
+    float confidence;
+};
+
+struct PyCtmInterval : CtmInterval {
+    using CtmInterval::CtmInterval; // Inherit constructors
+
+    float compare_labels(const std::string &other_label, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const override {
+      PYBIND11_OVERRIDE_PURE(float, CtmInterval, compare_labels, other_label, silence_phone, mapping);
+    }
+
+    float calculate_score(const CtmInterval &other_interval, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const override {
+      PYBIND11_OVERRIDE_PURE(float, CtmInterval, calculate_score, other_interval, silence_phone, mapping);
+    }
+};
+
+struct WordCtmInterval {
+    WordCtmInterval(
+      const std::string &label,
+      const int32 &symbol,
+      const std::vector<CtmInterval> &phones) : label(label), symbol(symbol), phones(phones) { }
+    WordCtmInterval() :  label("-"), symbol(-1), phones() { }
+
+    virtual float compare_labels(const std::string &other_label, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const{
+        if (label == other_label){
+            return 0.0;
+        }
+        else if (label == silence_phone || other_label == silence_phone){
+            return 10.0;
+        }
+        std::map<std::string, std::set<std::string>>::const_iterator pos = mapping.find(other_label);
+        if (pos != mapping.end() && pos->second.find(label) != pos->second.end()){
+            return 0.0;
+        }
+        return 2.0;
+    }
+
+    virtual float calculate_score(const WordCtmInterval &other_interval, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const{
+        float score = compare_labels(other_interval.label, silence_phone, mapping);
+        float begin = getBegin();
+        float end = getEnd();
+        if (begin >= 0.0 && end > 0.0){
+          score += std::abs(begin - other_interval.getBegin());
+          score += std::abs(end - other_interval.getEnd());
+        }
+        return score;
+    }
+
+    const float getBegin() const {
+      if (!phones.empty()){
+        return phones.front().begin;
+      }
+      return 0.0;
+    }
+
+    const float getEnd() const {
+      if (!phones.empty()){
+        return phones.back().end;
+      }
+      return 0.0;
+    }
+
+    std::string getPronunciation() const {
+      if (phones.empty()){
+        return "";
+      }
+      std::string delimiter = " ";
+      std::string result = std::accumulate(std::next(phones.begin()), phones.end(),
+        phones[0].label,
+        [&delimiter](std::string& a, CtmInterval b) {
+          return a + delimiter+ b.label;
+        });
+      return result;
+    }
+
+    std::string label;
+    int32 symbol;
+    std::vector<CtmInterval> phones;
+};
+
+struct PyWordCtmInterval : WordCtmInterval {
+    using WordCtmInterval::WordCtmInterval; // Inherit constructors
+
+    float compare_labels(const std::string &other_label, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const override {
+      PYBIND11_OVERRIDE_PURE(float, WordCtmInterval, compare_labels, other_label, silence_phone, mapping);
+    }
+
+    float calculate_score(const WordCtmInterval &other_interval, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const override {
+      PYBIND11_OVERRIDE_PURE(float, WordCtmInterval, calculate_score, other_interval, silence_phone, mapping);
+    }
+};
+
+template<typename IntervalType>
+struct IntervalAlignment {
+    IntervalAlignment(const std::vector<std::pair<IntervalType, IntervalType>> &alignment, const float &score) : alignment(alignment), score(score) { }
+
+    void setReference(const std::vector<IntervalType> &refrence)  {
+      KALDI_ASSERT(refrence.size() == alignment.size());
+      for (size_t i = 1; i < alignment.size(); i++) {
+        alignment[i] = std::make_pair(refrence[i], alignment[i].second);
+      }
+    }
+
+    std::vector<IntervalType> getReference() {
+      std::vector<IntervalType> reference;
+      for (size_t i = 1; i < alignment.size(); i++) {
+        reference.push_back(alignment[i].first);
+      }
+      return reference;
+    }
+
+    void setTest(const std::vector<IntervalType> &test) {
+      KALDI_ASSERT(test.size() == alignment.size());
+      for (size_t i = 1; i < alignment.size(); i++) {
+        alignment[i] = std::make_pair(alignment[i].first, test[i]);
+      }
+    }
+
+    std::vector<IntervalType> getTest() {
+      std::vector<IntervalType> test;
+      for (size_t i = 1; i < alignment.size(); i++) {
+        test.push_back(alignment[i].second);
+      }
+      return test;
+    }
+
+    const size_t &getLength() const { return alignment.size(); }
+
+    std::vector<std::pair<IntervalType, IntervalType>> alignment;
     float score;
 };
+
+template<typename IntervalType>
+IntervalAlignment<IntervalType> align_intervals(
+  const std::vector<IntervalType> &reference_intervals,
+  const std::vector<IntervalType> &hypothesis_intervals,
+  const std::string &silence_phone,
+  const std::map<std::string, std::set<std::string>> &mapping) {
+
+            py::gil_scoped_release release;
+            std::vector<std::pair<IntervalType, IntervalType> > output;
+            IntervalType eps_interval = IntervalType();
+            // This is very memory-inefficiently implemented using a vector of vectors.
+            size_t M = reference_intervals.size(), N = hypothesis_intervals.size();
+            size_t m, n;
+            std::vector<std::vector<float> > e(M+1);
+            for (m = 0; m <=M; m++) e[m].resize(N+1);
+            for (n = 0; n <= N; n++)
+              e[0][n]  = n;
+            for (m = 1; m <= M; m++) {
+              e[m][0] = e[m-1][0] + 1;
+              for (n = 1; n <= N; n++) {
+                float sub_or_ok = e[m-1][n-1] + reference_intervals[m-1].calculate_score(hypothesis_intervals[n-1], silence_phone, mapping);
+                float del = e[m-1][n] + 1.0;  // assumes a == ref, b == hyp.
+                float ins = e[m][n-1] + 1.0;
+                e[m][n] = std::min(sub_or_ok, std::min(del, ins));
+              }
+            }
+            // get time-reversed output first: trace back.
+            m = M;
+            n = N;
+            while (m != 0 || n != 0) {
+              size_t last_m, last_n;
+              if (m == 0) {
+                last_m = m;
+                last_n = n-1;
+              } else if (n == 0) {
+                last_m = m-1;
+                last_n = n;
+              } else {
+                float sub_or_ok = e[m-1][n-1] + reference_intervals[m-1].calculate_score(hypothesis_intervals[n-1], silence_phone, mapping);
+                float del = e[m-1][n] + 1.0;  // assumes a == ref, b == hyp.
+                float ins = e[m][n-1] + 1.0;
+                // choose sub_or_ok if all else equal.
+                if (sub_or_ok <= std::min(del, ins)) {
+                  last_m = m-1;
+                  last_n = n-1;
+                } else {
+                  if (del <= ins) {  // choose del over ins if equal.
+                    last_m = m-1;
+                    last_n = n;
+                  } else {
+                    last_m = m;
+                    last_n = n-1;
+                  }
+                }
+              }
+              IntervalType a_sym, b_sym;
+              a_sym = (last_m == m ? eps_interval : reference_intervals[last_m]);
+              b_sym = (last_n == n ? eps_interval : hypothesis_intervals[last_n]);
+              output.push_back(std::make_pair(a_sym, b_sym));
+              m = last_m;
+              n = last_n;
+            }
+            size_t sz = output.size();
+            for (size_t i = 0; i < sz/2; i++)
+              std::swap( output[i], output[sz-1-i]);
+            py::gil_scoped_acquire gil_acquire;
+            return IntervalAlignment<IntervalType>(output, e[M][N]);
+
+                         }
 
 void ignore_logs(const LogMessageEnvelope &envelope,
                            const char *message){
@@ -335,97 +569,323 @@ void init_util(py::module &_m) {
     pybind_read_kaldi_object<MatrixBase<double>>(m);
     pybind_read_kaldi_object<ConstArpaLm>(m);
 
-    py::class_<Interval>(m, "Interval")
+    py::class_<Interval, PyInterval>(m, "Interval")
         .def(py::init<const float &, const float &, const std::string &>(),
         py::arg("begin"),
         py::arg("end"),
         py::arg("label"))
-        .def("setLabel", &Interval::setLabel,
-            py::arg("label"))
-        .def("getLabel", &Interval::getLabel)
-        .def("setBegin", &Interval::setBegin,
-            py::arg("begin"))
-        .def("getBegin", &Interval::getBegin)
-        .def("setEnd", &Interval::setEnd,
-            py::arg("end"))
-        .def("getEnd", &Interval::getEnd)
+        .def_readwrite("begin", &Interval::begin)
+        .def_readwrite("end", &Interval::end)
+        .def_readwrite("label", &Interval::label)
         .def("compare_labels", &Interval::compare_labels,
+          "Score two labels based on whether they match or count as the same phone based on the mapping",
             py::arg("other_label"),
             py::arg("silence_phone"),
             py::arg("mapping"))
-        .def("score", &Interval::score,
+        .def("calculate_score", &Interval::calculate_score,
+          "Method to calculate overlap scoring",
             py::arg("other_interval"),
             py::arg("silence_phone"),
-            py::arg("mapping"));
+            py::arg("mapping"))
+        .def("__add__",
+              [](Interval &a, const float other) {
+                a.begin += other;
+                a.end += other;
+            },
+            py::arg("other"))
+        .def("__add__",
+              [](Interval &a, const std::string &other) {
+                a.label += other;
+            },
+            py::arg("other"))
+        .def("__lt__",
+              [](const Interval &a, const Interval &other) {
+                return a.begin < other.begin;
+            },
+            py::arg("other"))
+        .def("__lte__",
+              [](const Interval &a, const Interval &other) {
+                return a.begin <= other.begin;
+            },
+            py::arg("other"))
+        .def("__gt__",
+              [](const Interval &a, const Interval &other) {
+                return a.begin > other.begin;
+            },
+            py::arg("other"))
+        .def("__gte__",
+              [](const Interval &a, const Interval &other) {
+                return a.begin >= other.begin;
+            },
+            py::arg("other"))
+        .def("__repr__",
+              [](const Interval &a) {
+                return "<Interval of labeled '" + a.label + "' from " + std::to_string(a.begin) + " to " + std::to_string(a.end) +">";
+            })
+        .def(py::pickle(
+            [](const Interval &p) { // __getstate__
+                return py::make_tuple(p.begin, p.end, p.label);
+            },
+            [](py::tuple t) { // __setstate__
+                if (t.size() == 3){
+                  Interval p(t[0].cast<float>(), t[1].cast<float>(), t[2].cast<std::string>());
+                return p;
+                }
+
+                    throw pybind11::type_error("Invalid state!");
+
+
+            }
+        ));
+
+    py::class_<CtmInterval, PyCtmInterval>(m, "CtmInterval")
+        .def(py::init<
+          const float &,
+          const float &,
+          const std::string &,
+          const int32 &,
+          const float &>(),
+        py::arg("begin"),
+        py::arg("end"),
+        py::arg("label"),
+        py::arg("symbol"),
+        py::arg("confidence")=0.0)
+        .def(py::init<
+          const float &,
+          const float &,
+          const std::string &>(),
+        py::arg("begin"),
+        py::arg("end"),
+        py::arg("label"))
+        .def_readwrite("begin", &CtmInterval::begin)
+        .def_readwrite("end", &CtmInterval::end)
+        .def_readwrite("label", &CtmInterval::label)
+        .def_readwrite("symbol", &CtmInterval::symbol)
+        .def_readwrite("confidence", &CtmInterval::confidence)
+        .def("compare_labels", &CtmInterval::compare_labels,
+          "Score two labels based on whether they match or count as the same phone based on the mapping",
+            py::arg("other_label"),
+            py::arg("silence_phone"),
+            py::arg("mapping"))
+        .def("calculate_score", &CtmInterval::calculate_score,
+          "Method to calculate overlap scoring",
+            py::arg("other_interval"),
+            py::arg("silence_phone"),
+            py::arg("mapping"))
+        .def("__add__",
+              [](CtmInterval &a, const float other) {
+                a.begin += other;
+                a.end += other;
+            },
+            py::arg("other"))
+        .def("__add__",
+              [](CtmInterval &a, const std::string &other) {
+                a.label += other;
+            },
+            py::arg("other"))
+        .def("__lt__",
+              [](const CtmInterval &a, const Interval &other) {
+                return a.begin < other.begin;
+            },
+            py::arg("other"))
+        .def("__lte__",
+              [](const CtmInterval &a, const Interval &other) {
+                return a.begin <= other.begin;
+            },
+            py::arg("other"))
+        .def("__gt__",
+              [](const CtmInterval &a, const Interval &other) {
+                return a.begin > other.begin;
+            },
+            py::arg("other"))
+        .def("__gte__",
+              [](const CtmInterval &a, const Interval &other) {
+                return a.begin >= other.begin;
+            },
+            py::arg("other"))
+        .def("__eq__",
+              [](const CtmInterval &a, const CtmInterval &other) {
+                return a.begin == other.begin && a.end == other.end && a.label == other.label;
+            },
+            py::arg("other"))
+        .def("__repr__",
+              [](const CtmInterval &a) {
+                return "<CtmInterval of labeled '" + a.label + "' from " + std::to_string(a.begin) + " to " + std::to_string(a.end) +">";
+            })
+        .def(py::pickle(
+            [](const CtmInterval &p) { // __getstate__
+                return py::make_tuple(p.begin, p.end, p.label, p.symbol, p.confidence);
+            },
+            [](py::tuple t) { // __setstate__
+                if (t.size() != 5)
+                    throw pybind11::type_error("Invalid state!");
+
+                CtmInterval p(t[0].cast<float>(), t[1].cast<float>(), t[2].cast<std::string>(), t[3].cast<int32>(), t[4].cast<float>());
+
+                return p;
+            }
+        ));
+
+    py::class_<WordCtmInterval, PyWordCtmInterval>(m, "WordCtmInterval")
+        .def(py::init<
+          const std::string &,
+          const int32 &,
+          const std::vector<CtmInterval> &>(),
+        py::arg("label"),
+        py::arg("symbol"),
+        py::arg("phones"))
+        .def_readwrite("label", &WordCtmInterval::label)
+        .def_readwrite("symbol", &WordCtmInterval::symbol)
+        .def_readwrite("phones", &WordCtmInterval::phones)
+        .def_property_readonly("begin", &WordCtmInterval::getBegin)
+        .def_property_readonly("end", &WordCtmInterval::getEnd)
+        .def_property_readonly("pronunciation", &WordCtmInterval::getPronunciation)
+        .def("compare_labels", &WordCtmInterval::compare_labels,
+          "Score two labels based on whether they match or count as the same phone based on the mapping",
+            py::arg("other_label"),
+            py::arg("silence_phone"),
+            py::arg("mapping"))
+        .def("calculate_score", &WordCtmInterval::calculate_score,
+          "Method to calculate overlap scoring",
+            py::arg("other_interval"),
+            py::arg("silence_phone"),
+            py::arg("mapping"))
+        .def("__lt__",
+              [](const WordCtmInterval &a, const WordCtmInterval &other) {
+                return a.getBegin() < other.getBegin();
+            },
+            py::arg("other"))
+        .def("__lte__",
+              [](const WordCtmInterval &a, const WordCtmInterval &other) {
+                return a.getBegin() <= other.getBegin();
+            },
+            py::arg("other"))
+        .def("__gt__",
+              [](const WordCtmInterval &a, const WordCtmInterval &other) {
+                return a.getBegin() > other.getBegin();
+            },
+            py::arg("other"))
+        .def("__gte__",
+              [](const WordCtmInterval &a, const WordCtmInterval &other) {
+                return a.getBegin() >= other.getBegin();
+            },
+            py::arg("other"))
+        .def("__repr__",
+              [](const WordCtmInterval &a) {
+                return "<WordCtmInterval of labeled '" + a.label + "' from " + std::to_string(a.getBegin()) + " to " + std::to_string(a.getEnd()) +">";
+            })
+        .def(py::pickle(
+            [](const WordCtmInterval &p) { // __getstate__
+                return py::make_tuple(p.label, p.symbol, p.phones);
+            },
+            [](py::tuple t) { // __setstate__
+                if (t.size() != 3)
+                    throw pybind11::type_error("Invalid state!");
+
+                WordCtmInterval p(t[0].cast<std::string>(), t[1].cast<int32>(), t[2].cast<std::vector<CtmInterval>>());
+
+                return p;
+            }
+        ));
+
+    py::class_<IntervalAlignment<Interval>>(m, "IntervalAlignment")
+        .def(py::init<const std::vector<std::pair<Interval, Interval>> &, const float &>(),
+        py::arg("alignment"),
+        py::arg("score"))
+        .def_readwrite("alignment", &IntervalAlignment<Interval>::alignment)
+        .def_readwrite("score", &IntervalAlignment<Interval>::score)
+        .def_property("reference", &IntervalAlignment<Interval>::getReference, &IntervalAlignment<Interval>::setReference)
+        .def_property("test", &IntervalAlignment<Interval>::getTest, &IntervalAlignment<Interval>::setTest)
+        .def("__getitem__",
+              [](const IntervalAlignment<Interval> &a, const int32 index) {
+                return a.alignment[index];
+            },
+            py::arg("index"))
+        .def("__len__",
+              [](const IntervalAlignment<Interval> &a) {
+                return a.getLength();
+            })
+        .def("__repr__",
+              [](const IntervalAlignment<Interval> &a) {
+                return "<IntervalAlignment of length=" + std::to_string(a.getLength()) + " and score=" + std::to_string(a.score) +">";
+            })
+        .def("__iter__", [](const IntervalAlignment<Interval> &a) { return py::make_iterator(a.alignment.begin(), a.alignment.end()); },
+                         py::keep_alive<0, 1>() /* Essential: keep object alive while iterator exists */);
+
+    py::class_<IntervalAlignment<CtmInterval>>(m, "CtmIntervalAlignment")
+        .def(py::init<const std::vector<std::pair<CtmInterval, CtmInterval>> &, const float &>(),
+        py::arg("alignment"),
+        py::arg("score"))
+        .def_readwrite("alignment", &IntervalAlignment<CtmInterval>::alignment)
+        .def_readwrite("score", &IntervalAlignment<CtmInterval>::score)
+        .def_property("reference", &IntervalAlignment<CtmInterval>::getReference, &IntervalAlignment<CtmInterval>::setReference)
+        .def_property("test", &IntervalAlignment<CtmInterval>::getTest, &IntervalAlignment<CtmInterval>::setTest)
+        .def("__getitem__",
+              [](const IntervalAlignment<CtmInterval> &a, const int32 index) {
+                return a.alignment[index];
+            },
+            py::arg("index"))
+        .def("__len__",
+              [](const IntervalAlignment<CtmInterval> &a) {
+                return a.getLength();
+            })
+        .def("__repr__",
+              [](const IntervalAlignment<CtmInterval> &a) {
+                return "<IntervalAlignment of length=" + std::to_string(a.getLength()) + " and score=" + std::to_string(a.score) +">";
+            })
+        .def("__iter__", [](const IntervalAlignment<CtmInterval> &a) { return py::make_iterator(a.alignment.begin(), a.alignment.end()); },
+                         py::keep_alive<0, 1>() /* Essential: keep object alive while iterator exists */);
+
+    py::class_<IntervalAlignment<WordCtmInterval>>(m, "WordCtmIntervalAlignment")
+        .def(py::init<const std::vector<std::pair<WordCtmInterval, WordCtmInterval>> &, const float &>(),
+        py::arg("alignment"),
+        py::arg("score"))
+        .def_readwrite("alignment", &IntervalAlignment<WordCtmInterval>::alignment)
+        .def_readwrite("score", &IntervalAlignment<WordCtmInterval>::score)
+        .def_property("reference", &IntervalAlignment<WordCtmInterval>::getReference, &IntervalAlignment<WordCtmInterval>::setReference)
+        .def_property("test", &IntervalAlignment<WordCtmInterval>::getTest, &IntervalAlignment<WordCtmInterval>::setTest)
+        .def("__getitem__",
+              [](const IntervalAlignment<WordCtmInterval> &a, const int32 index) {
+                return a.alignment[index];
+            },
+            py::arg("index"))
+        .def("__len__",
+              [](const IntervalAlignment<WordCtmInterval> &a) {
+                return a.getLength();
+            })
+        .def("__repr__",
+              [](const IntervalAlignment<WordCtmInterval> &a) {
+                return "<IntervalAlignment of length=" + std::to_string(a.getLength()) + " and score=" + std::to_string(a.score) +">";
+            })
+        .def("__iter__", [](const IntervalAlignment<WordCtmInterval> &a) { return py::make_iterator(a.alignment.begin(), a.alignment.end()); },
+                         py::keep_alive<0, 1>() /* Essential: keep object alive while iterator exists */);
 
     m.def("align_intervals",
-          [](const std::vector<Interval> &reference_intervals,
-            const std::vector<Interval> &hypothesis_intervals,
-            const std::string &silence_phone,
-            const std::map<std::string, std::set<std::string>> &mapping){
+          align_intervals<Interval>,
+          "Align intervals based on how much they overlap and their label, with the ability to specify a custom mapping for "
+    "different labels to be scored as if they're the same",
+          py::arg("reference_intervals"),
+          py::arg("hypothesis_intervals"),
+          py::arg("silence_phone"),
+          py::arg("mapping"),
+          py::return_value_policy::take_ownership
+          );
 
-            py::gil_scoped_release release;
-            std::vector<std::pair<Interval, Interval> > output;
-            Interval eps_interval = Interval(0.0, 0.0, "-");
-            // This is very memory-inefficiently implemented using a vector of vectors.
-            size_t M = reference_intervals.size(), N = hypothesis_intervals.size();
-            size_t m, n;
-            std::vector<std::vector<float> > e(M+1);
-            for (m = 0; m <=M; m++) e[m].resize(N+1);
-            for (n = 0; n <= N; n++)
-              e[0][n]  = n;
-            for (m = 1; m <= M; m++) {
-              e[m][0] = e[m-1][0] + 1;
-              for (n = 1; n <= N; n++) {
-                float sub_or_ok = e[m-1][n-1] + reference_intervals[m-1].score(hypothesis_intervals[n-1], silence_phone, mapping);
-                float del = e[m-1][n] + 1.0;  // assumes a == ref, b == hyp.
-                float ins = e[m][n-1] + 1.0;
-                e[m][n] = std::min(sub_or_ok, std::min(del, ins));
-              }
-            }
-            // get time-reversed output first: trace back.
-            m = M;
-            n = N;
-            while (m != 0 || n != 0) {
-              size_t last_m, last_n;
-              if (m == 0) {
-                last_m = m;
-                last_n = n-1;
-              } else if (n == 0) {
-                last_m = m-1;
-                last_n = n;
-              } else {
-                float sub_or_ok = e[m-1][n-1] + reference_intervals[m-1].score(hypothesis_intervals[n-1], silence_phone, mapping);
-                float del = e[m-1][n] + 1.0;  // assumes a == ref, b == hyp.
-                float ins = e[m][n-1] + 1.0;
-                // choose sub_or_ok if all else equal.
-                if (sub_or_ok <= std::min(del, ins)) {
-                  last_m = m-1;
-                  last_n = n-1;
-                } else {
-                  if (del <= ins) {  // choose del over ins if equal.
-                    last_m = m-1;
-                    last_n = n;
-                  } else {
-                    last_m = m;
-                    last_n = n-1;
-                  }
-                }
-              }
-              Interval a_sym, b_sym;
-              a_sym = (last_m == m ? eps_interval : reference_intervals[last_m]);
-              b_sym = (last_n == n ? eps_interval : hypothesis_intervals[last_n]);
-              output.push_back(std::make_pair(a_sym, b_sym));
-              m = last_m;
-              n = last_n;
-            }
-            size_t sz = output.size();
-            for (size_t i = 0; i < sz/2; i++)
-              std::swap( output[i], output[sz-1-i]);
-            py::gil_scoped_acquire gil_acquire;
-            return py::make_tuple(e[M][N], output);
+    m.def("align_intervals",
+          align_intervals<CtmInterval>,
+          "Align intervals based on how much they overlap and their label, with the ability to specify a custom mapping for "
+    "different labels to be scored as if they're the same",
+          py::arg("reference_intervals"),
+          py::arg("hypothesis_intervals"),
+          py::arg("silence_phone"),
+          py::arg("mapping"),
+          py::return_value_policy::take_ownership
+          );
 
-                         },
+    m.def("align_intervals",
+          align_intervals<WordCtmInterval>,
+          "Align intervals based on how much they overlap and their label, with the ability to specify a custom mapping for "
+    "different labels to be scored as if they're the same",
           py::arg("reference_intervals"),
           py::arg("hypothesis_intervals"),
           py::arg("silence_phone"),

@@ -11,7 +11,8 @@ import numpy as np
 import pywrapfst
 from praatio import textgrid as tgio
 from praatio.data_classes.textgrid import _tgToDictionary
-from praatio.utilities.constants import Interval, TextgridFormats
+from praatio.utilities.constants import Interval as PraatInterval
+from praatio.utilities.constants import TextgridFormats
 
 from _kalpy.fstext import GetLinearSymbolSequence, VectorFst
 from _kalpy.hmm import SplitToPhones, TransitionModel
@@ -31,126 +32,38 @@ from _kalpy.lat import (
 )
 from _kalpy.matrix import FloatVector
 from _kalpy.util import (
+    CtmInterval,
     Interval,
     RandomAccessBaseFloatVectorReader,
     RandomAccessInt32VectorReader,
     SequentialBaseFloatVectorReader,
     SequentialInt32VectorReader,
+    WordCtmInterval,
 )
 from kalpy.exceptions import CtmError
 from kalpy.utils import generate_read_specifier
 
 
-# noinspection PyUnresolvedReferences
-@dataclassy.dataclass(slots=True)
-class CtmInterval:
+def to_tg_interval(
+    interval: typing.Union[Interval, CtmInterval, WordCtmInterval], file_duration=None
+) -> PraatInterval:
     """
-    Data class for intervals derived from CTM files
+    Converts the Kalpy's CtmInterval to
+    `PraatIO's Interval class <http://timmahrt.github.io/praatIO/praatio/utilities/constants.html#Interval>`_
 
-    Parameters
-    ----------
-    begin: float
-        Start time of interval
-    end: float
-        End time of interval
-    label: str
-        Text of interval
-    confidence: float, optional
-        Confidence score of the interval
+    Returns
+    -------
+    :class:`praatio.utilities.constants.Interval`
+        Derived PraatIO Interval
     """
-
-    begin: float
-    end: float
-    label: str
-    symbol: int
-    confidence: typing.Optional[float] = None
-
-    def __lt__(self, other: CtmInterval):
-        """Sorting function for CtmIntervals"""
-        return self.begin < other.begin
-
-    def __add__(self, other):
-        if isinstance(other, str):
-            return self.label + other
-        else:
-            self.begin += other
-            self.end += other
-
-    def __post_init__(self) -> None:
-        """
-        Check on data validity
-
-        Raises
-        ------
-        :class:`~montreal_forced_aligner.exceptions.CtmError`
-            If begin or end are not valid
-        """
-        if self.end < -1 or self.begin == 1000000:
-            raise CtmError(self)
-
-    def to_kalpy_interval(self):
-        return Interval(self.begin, self.end, self.label)
-
-    def to_tg_interval(self, file_duration=None) -> Interval:
-        """
-        Converts the CTMInterval to
-        `PraatIO's Interval class <http://timmahrt.github.io/praatIO/praatio/utilities/constants.html#Interval>`_
-
-        Returns
-        -------
-        :class:`praatio.utilities.constants.Interval`
-            Derived PraatIO Interval
-        """
-        if self.end < -1 or self.begin == 1000000:
-            raise CtmError(self)
-        end = round(self.end, 6)
-        begin = round(self.begin, 6)
-        if file_duration is not None and end > file_duration:
-            end = round(file_duration, 6)
-        assert begin < end
-        return Interval(round(self.begin, 6), end, self.label)
-
-
-@dataclassy.dataclass
-class WordCtmInterval:
-    label: str
-    symbol: int
-    phones: typing.List[CtmInterval]
-
-    @property
-    def begin(self):
-        if len(self.phones) > 0:
-            return self.phones[0].begin
-        return 0.0
-
-    @property
-    def end(self):
-        if len(self.phones) > 0:
-            return self.phones[-1].end
-        return 0.0
-
-    @property
-    def pronunciation(self):
-        return " ".join(x.label for x in self.phones)
-
-    def to_tg_interval(self, file_duration=None) -> Interval:
-        """
-        Converts the CTMInterval to
-        `PraatIO's Interval class <http://timmahrt.github.io/praatIO/praatio/utilities/constants.html#Interval>`_
-
-        Returns
-        -------
-        :class:`praatio.utilities.constants.Interval`
-            Derived PraatIO Interval
-        """
-        if self.end < -1 or self.begin == 1000000:
-            raise CtmError(self)
-        end = round(self.end, 6)
-        begin = round(self.begin, 6)
-        if file_duration is not None and end > file_duration:
-            end = file_duration
-        assert begin < end
-        return Interval(begin, end, self.label)
+    if interval.end < -1 or interval.begin == 1000000:
+        raise CtmError(interval)
+    end = round(interval.end, 6)
+    begin = round(interval.begin, 6)
+    if file_duration is not None and end > file_duration:
+        end = round(file_duration, 6)
+    assert begin < end
+    return PraatInterval(round(interval.begin, 6), end, interval.label)
 
 
 @dataclassy.dataclass
@@ -204,9 +117,9 @@ class HierarchicalCtm:
         word_tier = tgio.IntervalTier("words", [], minT=0.0, maxT=file_duration)
         phone_tier = tgio.IntervalTier("phones", [], minT=0.0, maxT=file_duration)
         for w in self.word_intervals:
-            word_tier.insertEntry(w.to_tg_interval(file_duration))
+            word_tier.insertEntry(to_tg_interval(w, file_duration))
             for p in w.phones:
-                phone_tier.insertEntry(p.to_tg_interval())
+                phone_tier.insertEntry(to_tg_interval(p, file_duration))
         return word_tier, phone_tier
 
     def update_utterance_boundaries(self, begin, end=None):
@@ -214,7 +127,7 @@ class HierarchicalCtm:
             for p in w.phones:
                 p.begin += begin
                 p.end += begin
-        if len(self.word_intervals):
+        if self.word_intervals:
             self.word_intervals[-1].phones[-1].end = end
 
 
@@ -274,7 +187,7 @@ class Alignment:
             duration = frame_shift * num_repeats
             phone_end = phone_start + duration
             label = phone_table.find(phone_id)
-            confidence = None
+            confidence = 0.0
             if likelihoods is not None:
                 confidence = float(
                     np.mean(likelihoods[current_phone_index : current_phone_index + num_repeats])
@@ -285,7 +198,7 @@ class Alignment:
                     round(phone_end, 3),
                     label,
                     phone_id,
-                    confidence=confidence,
+                    confidence,
                 )
             )
             phone_start += duration
@@ -322,15 +235,15 @@ class Alignment:
         for i, a in enumerate(sorted(intervals, key=lambda x: x.begin)):
             if i == len(intervals) - 1:
                 a.end = duration
-            if i > 0 and phone_tier.entries[-1].end > a.to_tg_interval().start:
+            if i > 0 and phone_tier.entries[-1].end > to_tg_interval(a).start:
                 a.begin = phone_tier.entries[-1].end
-            phone_tier.insertEntry(a.to_tg_interval(duration))
+            phone_tier.insertEntry(to_tg_interval(a, duration))
         for i, a in enumerate(sorted(word_intervals, key=lambda x: x.begin)):
             if i == len(word_intervals) - 1:
                 a.end = duration
-            if i > 0 and word_tier.entries[-1].end > a.to_tg_interval().start:
+            if i > 0 and word_tier.entries[-1].end > to_tg_interval(a).start:
                 a.begin = word_tier.entries[-1].end
-            word_tier.insertEntry(a.to_tg_interval(duration))
+            word_tier.insertEntry(to_tg_interval(a, duration))
         for tier in tg.tiers:
             if len(tier.entries) > 0 and tier.entries[-1][1] > tg.maxTimestamp:
                 tier.insertEntry(

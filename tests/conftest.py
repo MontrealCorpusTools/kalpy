@@ -542,3 +542,25 @@ def dictionary_path(dictionaries_dir):
 @pytest.fixture(scope="session")
 def sat_dictionary_path(dictionaries_dir):
     return dictionaries_dir.joinpath("test_sat.txt")
+
+
+@pytest.fixture(scope="session")
+def reference_hello_intervals():
+    from _kalpy.util import Interval
+
+    return [
+        Interval(0.0, 1.0, "hh"),
+        Interval(1.0, 2.0, "eh"),
+        Interval(2.0, 3.0, "l"),
+        Interval(3.0, 4.0, "ow"),
+    ]
+
+
+@pytest.fixture(scope="session")
+def test_hi_intervals():
+    from _kalpy.util import Interval
+
+    return [
+        Interval(0.0, 1.0, "hh"),
+        Interval(1.0, 2.0, "ay"),
+    ]

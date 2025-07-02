@@ -36,19 +36,24 @@ class DecodableAmDiagGmmScaledMasked: public DecodableAmDiagGmmUnmapped {
   DecodableAmDiagGmmScaledMasked(const AmDiagGmm &am,
                            const TransitionModel &tm,
                            const Matrix<BaseFloat> &feats,
-                           const std::vector<int32> &phone_vector,
+                           const std::vector<std::vector<int32>> &reference_alignment,
                            BaseFloat scale,
                            BaseFloat log_sum_exp_prune = -1.0):
-      DecodableAmDiagGmmUnmapped(am, feats, log_sum_exp_prune), trans_model_(tm), phone_vector_(phone_vector), scale_(scale){}
+      DecodableAmDiagGmmUnmapped(am, feats, log_sum_exp_prune), trans_model_(tm), reference_alignment_(reference_alignment), scale_(scale){}
 
   // Note, frames are numbered from zero but transition-ids from one.
   virtual BaseFloat LogLikelihood(int32 frame, int32 tid) {
+      std::vector<int32> phones = reference_alignment_[frame];
+
     int32 pid = trans_model_.TransitionIdToPhone(tid);
-    if (phone_vector_[frame] != pid && phone_vector_[frame] >= 0) {
+    if (phones.size() == 0 ||
+        std::find(phones.begin(), phones.end(), -1) != phones.end() ||
+        std::find(phones.begin(), phones.end(), pid) != phones.end()
+      ) {
+      return scale_*LogLikelihoodZeroBased(frame,
+                                          trans_model_.TransitionIdToPdf(tid));
+      }
       return -1000000.0;
-    }
-    return scale_*LogLikelihoodZeroBased(frame,
-                                         trans_model_.TransitionIdToPdf(tid));
   }
   // Indices are one-based!  This is for compatibility with OpenFst.
   virtual int32 NumIndices() const { return trans_model_.NumTransitionIds(); }
@@ -58,7 +63,7 @@ class DecodableAmDiagGmmScaledMasked: public DecodableAmDiagGmmUnmapped {
  private: // want to access it public to have pdf id information
   const TransitionModel &trans_model_;  // for transition-id to pdf mapping
   BaseFloat scale_;
-  const std::vector<int32> &phone_vector_;
+  const std::vector<std::vector<int32>> reference_alignment_;
   KALDI_DISALLOW_COPY_AND_ASSIGN(DecodableAmDiagGmmScaledMasked);
 };
 
@@ -79,6 +84,7 @@ void GetOccs(const BuildTreeStatsType &stats,
   for (int32 pdf = 0; pdf < occs->Dim(); pdf++)
     (*occs)(pdf) = SumNormalizer(split_stats[pdf]);
 }
+
 void pybind_am_diag_gmm(py::module& m) {
   {
     using PyClass = AmDiagGmm;
@@ -472,13 +478,13 @@ void pybind_decodable_am_diag_gmm(py::module& m) {
         decodable_am_diag_gmm_scaled_masked.def(py::init<const AmDiagGmm &,
                             const TransitionModel &,
                              const Matrix<BaseFloat> &,
-                             const std::vector<int32> &,
+                             const std::vector<std::vector<int32>> &,
                            BaseFloat,
                              BaseFloat>(),
           py::arg("am"),
           py::arg("tm"),
           py::arg("feats"),
-          py::arg("phone_vector"),
+          py::arg("reference_alignment"),
           py::arg("scale"),
           py::arg("log_sum_exp_prune") = -1.0)
       .def("LogLikelihood",
@@ -2127,7 +2133,7 @@ void init_gmm(py::module &_m) {
       const AmDiagGmm  &am_gmm,
       VectorFst<StdArc> *decode_fst,
       const Matrix<BaseFloat> &features,
-      const std::vector<int32> &phone_vector,
+      const std::vector<std::vector<int32>> &reference_alignment,
     BaseFloat acoustic_scale = 1.0,
     BaseFloat transition_scale = 1.0,
     BaseFloat self_loop_scale = 1.0,
@@ -2150,7 +2156,7 @@ void init_gmm(py::module &_m) {
         LatticeWeight weight;
         BaseFloat like = 0.0;
         Vector<BaseFloat> per_frame_loglikes;
-        DecodableAmDiagGmmScaledMasked decodable(am_gmm, trans_model, features, phone_vector,
+        DecodableAmDiagGmmScaledMasked decodable(am_gmm, trans_model, features, reference_alignment,
                                                acoustic_scale);
 
         if (careful)
@@ -2195,7 +2201,7 @@ void init_gmm(py::module &_m) {
         py::arg("am_gmm"),
         py::arg("decode_fst"),
         py::arg("features"),
-        py::arg("phone_vector"),
+        py::arg("reference_alignment"),
         py::arg("acoustic_scale") = 1.0,
         py::arg("transition_scale") = 1.0,
         py::arg("self_loop_scale") = 1.0,

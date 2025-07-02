@@ -161,11 +161,13 @@ class TrainingGraphCompiler:
         writer = VectorFstWriter(write_specifier)
         keys = []
         transcript_batch = []
+        original_transcripts = []
         num_done = 0
         num_error = 0
         logger.debug(f"DISAMBIGUATION: {self.lexicon_compiler.disambiguation}")
         for key, transcript in transcripts:
             keys.append(key)
+            original_transcripts.append(transcript)
             if self.use_g2p:
                 transcript_batch.append(transcript)
             elif interjection_words:
@@ -181,7 +183,6 @@ class TrainingGraphCompiler:
                         fsts.append(self.compile_fst(t))
                 elif interjection_words:
                     fsts = self.compiler.CompileGraphs(transcript_batch)
-                    del transcript_batch
                 else:
                     fsts = self.compiler.CompileGraphsFromText(transcript_batch)
                 assert len(fsts) == len(keys)
@@ -190,7 +191,11 @@ class TrainingGraphCompiler:
                 for i, key in enumerate(keys):
                     fst = fsts[i]
                     if fst.Start() == pywrapfst.NO_STATE_ID:
-                        logger.warning(f"Skipping {key}, empty FST")
+                        original_transcript = original_transcripts[i]
+                        transcript = transcript_batch[i]
+                        logger.warning(
+                            f"Skipping {key}, empty FST for {transcript} ({original_transcript})"
+                        )
                         batch_error += 1
                         continue
                     writer.Write(str(key), fst)
@@ -203,6 +208,7 @@ class TrainingGraphCompiler:
                     callback(batch_done)
                 keys = []
                 transcript_batch = []
+                original_transcripts = []
                 del fsts
         if keys:
             if self.use_g2p:
