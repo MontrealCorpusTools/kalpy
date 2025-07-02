@@ -62,7 +62,7 @@ class Utterance:
 
         if pitch_computer is not None:
             pitch = pitch_computer.compute_pitch_for_export(self.segment, compress=False)
-            feats = paste_feats([feats, pitch], 0)
+            feats = paste_feats([feats, pitch], 1)
         if uses_splices:
             feats = splice_frames(feats, splice_context, splice_context)
             if lda_mat is not None:
