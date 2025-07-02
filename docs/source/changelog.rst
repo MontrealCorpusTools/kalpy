@@ -4,6 +4,13 @@
 Changelog
 =========
 
+0.7.0
+-----
+
+- Added support for aligning from manual alignments to use in training/adapting
+- Implemented Levenshtein alignment for interval overlap scoring
+- Added a workaround for a bug in mismatched MFCC and pitch features differing in frames under certain conditions in Kaldi
+
 0.6.6
 -----
 
