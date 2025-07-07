@@ -4,7 +4,7 @@ dependencies:
   - python>=3.9
   - numpy
   - librosa
-  - praatio=6.0.0
+  - praatio>=6.0.0
   - dataclassy
   - pynini
   - sphinx

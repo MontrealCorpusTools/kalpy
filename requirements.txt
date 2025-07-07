@@ -3,4 +3,4 @@ numpy
 pysoundfile
 pynini
 dataclassy
-praatio
+praatio>=6.0.0
