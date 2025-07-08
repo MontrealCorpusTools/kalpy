@@ -265,12 +265,12 @@ def fix_unk_words(
     alignment = align_intervals(ref_intervals, test, lexicon_compiler.silence_word, {})
     output_ctm = []
     for sa, sb in alignment.alignment:
-        if sa == "-":
+        if sa.label == "-":
             output_ctm.append(sb)
-        elif sb == "-":
+        elif sb.label == "-":
             continue
         else:
-            if sa != sb.label and sb.label == lexicon_compiler.oov_word:
+            if sa.label != sb.label and sb.label == lexicon_compiler.oov_word:
                 sb.label = sa.label
             output_ctm.append(sb)
     return output_ctm
