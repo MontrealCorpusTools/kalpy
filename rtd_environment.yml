@@ -20,3 +20,4 @@ dependencies:
   - cmake
   - pybind11
   - ninja
+  - pyyaml

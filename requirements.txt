@@ -2,5 +2,6 @@ librosa
 numpy
 pysoundfile
 pynini
+pyyaml
 dataclassy
 praatio>=6.0.0
