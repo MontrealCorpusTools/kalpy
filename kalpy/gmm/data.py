@@ -40,8 +40,13 @@ from _kalpy.util import (
     SequentialInt32VectorReader,
     WordCtmInterval,
 )
+from kalpy.data import Segment
 from kalpy.exceptions import CtmError
 from kalpy.utils import generate_read_specifier
+from kalpy.utterance import Utterance
+
+if typing.TYPE_CHECKING:
+    from kalpy.models import AcousticModel
 
 
 def to_tg_interval(
@@ -76,9 +81,10 @@ class HierarchicalCtm:
         self,
         file_name: typing.Union[str, pathlib.Path],
         file_duration: float = None,
-        output_format: str = TextgridFormats.LONG_TEXTGRID,
+        output_format: typing.Literal[
+            "short_textgrid", "long_textgrid", "json", "textgrid_json"
+        ] = "short_textgrid",
     ):
-        # Create initial textgrid
         if file_duration is not None:
             file_duration = round(file_duration, 6)
         tg = tgio.Textgrid()
@@ -108,6 +114,23 @@ class HierarchicalCtm:
                 format=output_format,
                 reportingMode="error",
             )
+
+    @property
+    def phone_boundaries(self):
+        boundaries = []
+        for i, wi in enumerate(self.word_intervals):
+            for j, pi in enumerate(wi.phones):
+                if i + j != 0:
+                    boundaries.append(pi.begin)
+        return boundaries
+
+    @property
+    def labelled_midpoints(self):
+        labels = []
+        for wi in self.word_intervals:
+            for pi in wi.phones:
+                labels.append((pi.label, (pi.begin + pi.end) / 2))
+        return labels
 
     def to_textgrid_tiers(
         self, file_duration: float = None
@@ -181,7 +204,7 @@ class Alignment:
         likelihoods = None
         if self.per_frame_likelihoods:
             likelihoods = self.per_frame_likelihoods.numpy()
-        for s in split:
+        for i, s in enumerate(split):
             phone_id = transition_model.TransitionIdToPhone(s[0])
             num_repeats = len(s)
             duration = frame_shift * num_repeats

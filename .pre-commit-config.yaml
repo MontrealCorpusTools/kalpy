@@ -36,4 +36,5 @@ repos:
       - id: trailing-whitespace
       - id: check-added-large-files
         args: ['--maxkb=2000']
+        exclude: 'tests/data'
       - id: mixed-line-ending

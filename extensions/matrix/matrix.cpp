@@ -806,6 +806,9 @@ void pybind_kaldi_vector(py::module& m) {
     ));
 
   py::class_<SubVector<float>, VectorBase<float>>(m, "FloatSubVector")
+      .def(py::init<const MatrixBase<float> &, MatrixIndexT>(),
+           py::arg("matrix"),
+           py::arg("row"))
       .def(py::init([](py::buffer b) {
         py::buffer_info info = b.request();
         if (info.format != py::format_descriptor<float>::format()) {
@@ -1242,6 +1245,9 @@ void pybind_kaldi_vector(py::module& m) {
     ));
 
   py::class_<SubVector<double>, VectorBase<double>>(m, "DoubleSubVector")
+      .def(py::init<const MatrixBase<double> &, MatrixIndexT>(),
+           py::arg("matrix"),
+           py::arg("row"))
       .def(py::init([](py::buffer b) {
         py::buffer_info info = b.request();
         if (info.format != py::format_descriptor<double>::format()) {

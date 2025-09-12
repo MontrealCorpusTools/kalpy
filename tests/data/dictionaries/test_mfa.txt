@@ -1,0 +1,3 @@
+montreal	0.99	0.14	1.0	1.0	m ɑ n tʲ ɹ i ɒ ɫ
+forced	0.99	0.04	0.85	1.05	f ɒ ɹ s t
+aligner	0.99	0.14	1.0	1.0	ə l aj n ɚ

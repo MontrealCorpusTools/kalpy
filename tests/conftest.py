@@ -35,6 +35,11 @@ def sat_am_dir(am_dir):
 
 
 @pytest.fixture(scope="session")
+def english_mfa_am_dir(am_dir):
+    return am_dir.joinpath("english_mfa")
+
+
+@pytest.fixture(scope="session")
 def temp_dir(test_dir):
     p = test_dir.joinpath("temp")
     p.mkdir(exist_ok=True)
@@ -500,6 +505,11 @@ def wav_path(wav_dir):
 
 
 @pytest.fixture(scope="session")
+def mfa_wav_path(wav_dir):
+    return wav_dir.joinpath("mfa_michael.flac")
+
+
+@pytest.fixture(scope="session")
 def lm_path(lm_dir):
     return lm_dir.joinpath("test_lm.arpa")
 
@@ -542,6 +552,11 @@ def dictionary_path(dictionaries_dir):
 @pytest.fixture(scope="session")
 def sat_dictionary_path(dictionaries_dir):
     return dictionaries_dir.joinpath("test_sat.txt")
+
+
+@pytest.fixture(scope="session")
+def mfa_dictionary_path(dictionaries_dir):
+    return dictionaries_dir.joinpath("test_mfa.txt")
 
 
 @pytest.fixture(scope="session")

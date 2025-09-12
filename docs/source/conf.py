@@ -130,7 +130,6 @@ xref_links = {
         "Corpus Phonetics Tutorial",
         "https://eleanorchodroff.com/tutorial/intro.html",
     ),
-    "coqui": ("Coqui", "https://coqui.ai/"),
     "conda_installation": (
         "Conda installation",
         "https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html",

@@ -1,3 +1,6 @@
+"""Classes for utterance data"""
+from __future__ import annotations
+
 import typing
 
 import dataclassy
@@ -13,8 +16,11 @@ from _kalpy.feat import (
 from _kalpy.matrix import DoubleMatrix, FloatMatrix
 from _kalpy.transform import ApplyCmvn, apply_transform
 from kalpy.data import Segment
-from kalpy.feat.mfcc import MfccComputer
-from kalpy.feat.pitch import PitchComputer
+from kalpy.feat.cmvn import CmvnComputer
+
+if typing.TYPE_CHECKING:
+    from kalpy.feat.mfcc import MfccComputer
+    from kalpy.models import AcousticModel
 
 
 @dataclassy.dataclass
@@ -44,29 +50,34 @@ class Utterance:
 
     def generate_features(
         self,
-        mfcc_computer: MfccComputer,
-        pitch_computer: PitchComputer = None,
-        lda_mat: FloatMatrix = None,
+        acoustic_model: AcousticModel,
+        cmvn: typing.Optional[DoubleMatrix] = None,
         fmllr_trans: FloatMatrix = None,
         uses_speaker_adaptation: bool = True,
         uses_splices: bool = False,
         uses_deltas: bool = True,
         splice_context: int = 3,
     ):
-        if lda_mat is not None:
+        if acoustic_model.lda_mat is not None:
             uses_splices = True
             uses_deltas = False
         if self.mfccs is None:
-            self.generate_mfccs(mfcc_computer)
+            self.generate_mfccs(acoustic_model.mfcc_computer)
+            if cmvn is None:
+                cmvn_computer = CmvnComputer()
+                cmvn = cmvn_computer.compute_cmvn_from_features([self.mfccs])
+            self.apply_cmvn(cmvn)
         feats = self.mfccs
 
-        if pitch_computer is not None:
-            pitch = pitch_computer.compute_pitch_for_export(self.segment, compress=False)
+        if acoustic_model.pitch_computer is not None:
+            pitch = acoustic_model.pitch_computer.compute_pitch_for_export(
+                self.segment, compress=False
+            )
             feats = paste_feats([feats, pitch], 1)
         if uses_splices:
             feats = splice_frames(feats, splice_context, splice_context)
-            if lda_mat is not None:
-                feats = apply_transform(feats, lda_mat)
+            if acoustic_model.lda_mat is not None:
+                feats = apply_transform(feats, acoustic_model.lda_mat)
         elif uses_deltas:
             delta_options = DeltaFeaturesOptions()
             feats = compute_deltas(delta_options, feats)

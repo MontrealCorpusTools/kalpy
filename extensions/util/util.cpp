@@ -710,7 +710,7 @@ void init_util(py::module &_m) {
             py::arg("other"))
         .def("__repr__",
               [](const CtmInterval &a) {
-                return "<CtmInterval of labeled '" + a.label + "' from " + std::to_string(a.begin) + " to " + std::to_string(a.end) +">";
+                return "<CtmInterval of labeled '" + a.label +"("+ std::to_string(a.symbol) +")" + "' from " + std::to_string(a.begin) + " to " + std::to_string(a.end) +"confidence="+std::to_string(a.confidence)+">";
             })
         .def(py::pickle(
             [](const CtmInterval &p) { // __getstate__

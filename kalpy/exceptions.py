@@ -42,6 +42,26 @@ class CtmError(KalpyError):
         KalpyError.__init__(self, f"Error was encountered in processing CTM interval: {ctm}")
 
 
+class ReadError(KalpyError):
+    """
+    Class for reading files
+    """
+
+    pass
+
+
+class AlignerError(KalpyError):
+    """
+    Class for errors during alignment
+    """
+
+    pass
+
+
+class AcousticModelError(KalpyError):
+    pass
+
+
 class LexiconError(KalpyError):
     pass
 

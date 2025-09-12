@@ -2600,4 +2600,92 @@ void init_gmm(py::module &_m) {
         py::arg("features"),
         py::return_value_policy::take_ownership
         );
+
+  m.def("gmm_interpolate_boundary_fast",
+        [](const AmDiagGmm &am_gmm,
+          const TransitionModel &trans_model,
+          const Matrix<BaseFloat> &features,
+          const int32 previous_transition_id,
+          const int32 following_transition_id){
+
+          py::gil_scoped_release release;
+          std::vector<BaseFloat> ratios;
+          BaseFloat previous_phone_log_likelihood, following_phone_log_likelihood;
+          int32 previous_pdf_id = trans_model.TransitionIdToPdfFast(previous_transition_id);
+          int32 following_pdf_id = trans_model.TransitionIdToPdfFast(following_transition_id);
+          BaseFloat min_ratio, max_ratio, ratio;
+          min_ratio = 100000.0;
+          max_ratio = -10000.0;
+          for (int32 i = 0; i < features.NumRows(); i++) {
+            SubVector<BaseFloat> feat_row(features, i);
+            previous_phone_log_likelihood = am_gmm.LogLikelihood(previous_pdf_id, feat_row);
+            following_phone_log_likelihood = am_gmm.LogLikelihood(following_pdf_id, feat_row);
+            ratio = previous_phone_log_likelihood - following_phone_log_likelihood;
+            ratios.push_back(ratio);
+            if (ratio > max_ratio)
+              max_ratio = ratio;
+            if (ratio < min_ratio)
+              min_ratio = ratio;
+
+          }
+          for (int32 j = 0; j < ratios.size(); j++) {
+            ratio = ratios[j];
+            if (-1 + (2*(ratio - min_ratio) / (max_ratio - min_ratio)) < 0.0)
+              return j;
+          }
+          return -1;
+                       },
+        py::arg("am_gmm"),
+        py::arg("trans_model"),
+        py::arg("features"),
+        py::arg("previous_transition_id"),
+        py::arg("following_transition_id"),
+        py::return_value_policy::take_ownership
+        );
+
+  m.def("gmm_interpolate_boundary",
+        [](const AmDiagGmm &am_gmm,
+          const TransitionModel &trans_model,
+          const Matrix<BaseFloat> &features,
+          const int32 previous_transition_id,
+          const int32 following_transition_id){
+
+          py::gil_scoped_release release;
+          std::vector<BaseFloat> ratios, normalized_ratios;
+          BaseFloat previous_phone_log_likelihood, following_phone_log_likelihood;
+          int32 previous_pdf_id = trans_model.TransitionIdToPdfFast(previous_transition_id);
+          int32 following_pdf_id = trans_model.TransitionIdToPdfFast(following_transition_id);
+          BaseFloat min_ratio, max_ratio, ratio, normalized_ratio;
+          min_ratio = 100000.0;
+          max_ratio = -10000.0;
+          for (int32 i = 0; i < features.NumRows(); i++) {
+            SubVector<BaseFloat> feat_row(features, i);
+            previous_phone_log_likelihood = am_gmm.LogLikelihood(previous_pdf_id, feat_row);
+            following_phone_log_likelihood = am_gmm.LogLikelihood(following_pdf_id, feat_row);
+            ratio = previous_phone_log_likelihood - following_phone_log_likelihood;
+            ratios.push_back(ratio);
+            if (ratio > max_ratio)
+              max_ratio = ratio;
+            if (ratio < min_ratio)
+              min_ratio = ratio;
+
+          }
+          int32 boundary_index = -1;
+          for (int32 j = 0; j < ratios.size(); j++) {
+            ratio = ratios[j];
+            normalized_ratio = -1 + (2*(ratio - min_ratio) / (max_ratio - min_ratio));
+            if (normalized_ratio < 0.0)
+              boundary_index = j;
+            normalized_ratios.push_back(normalized_ratio);
+          }
+          py::gil_scoped_acquire acquire;
+          return py::make_tuple(boundary_index, normalized_ratios);
+                       },
+        py::arg("am_gmm"),
+        py::arg("trans_model"),
+        py::arg("features"),
+        py::arg("previous_transition_id"),
+        py::arg("following_transition_id"),
+        py::return_value_policy::take_ownership
+        );
 }
