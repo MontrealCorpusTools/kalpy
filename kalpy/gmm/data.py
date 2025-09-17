@@ -40,13 +40,8 @@ from _kalpy.util import (
     SequentialInt32VectorReader,
     WordCtmInterval,
 )
-from kalpy.data import Segment
 from kalpy.exceptions import CtmError
 from kalpy.utils import generate_read_specifier
-from kalpy.utterance import Utterance
-
-if typing.TYPE_CHECKING:
-    from kalpy.models import AcousticModel
 
 
 def to_tg_interval(

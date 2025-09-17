@@ -20,6 +20,33 @@ if typing.TYPE_CHECKING:
 
 
 class KalpyAligner:
+    """
+    Aligner class for generating alignments from a :class:`~kalpy.models.AcousticModel` and
+    :class:`~kalpy.fstext.lexicon.LexiconCompiler`.
+
+    Parameters
+    ----------
+    acoustic_model: :class:`~kalpy.models.AcousticModel`
+        Acoustic model
+    lexicon_compiler: :class:`~kalpy.fstext.lexicon.LexiconCompiler` or dict[Any, :class:`~kalpy.fstext.lexicon.LexiconCompiler`]
+        Single lexicon compiler to use for all utterances or a dictionary of different lexicon compilers to use
+        depending on the utterance
+    beam: int
+        Size of the beam to use in decoding, defaults to 10
+    retry_beam : int
+        Size of the beam to use in decoding if it fails with the initial beam width, defaults to 40
+    transition_scale : float
+        Transition scale, defaults to 1.0
+    acoustic_scale : float
+        Acoustic scale, defaults to 0.1
+    self_loop_scale : float
+        Self-loop scale, defaults to 0.1
+    boost_silence : float
+        Factor to boost silence probabilities, 1.0 is no boost or reduction
+    careful : bool
+        Flag for extra error checking on reaching final state, defaults to False
+    """
+
     def __init__(
         self,
         acoustic_model: AcousticModel,
@@ -95,6 +122,30 @@ class KalpyAligner:
         fmllr_trans: FloatMatrix = None,
         dictionary_id: typing.Any = None,
     ) -> Alignment:
+        """
+        Internal function for generating an :class:`~kalpy.gmm.data.Alignment` from an :class:`~kalpy.utterance.Utterance`
+
+        Parameters
+        ----------
+        utterance: :class:`~kalpy.utterance.Utterance`
+            Utterance to align
+        cmvn: :class:`~_kalpy.matrix.DoubleMatrix`, optional
+            CMVN transformation to use, if not provided, a CMVN transform will be applied based on the utterance features
+        fmllr_trans: :class:`~_kalpy.matrix.FloatMatrix`, optional
+            Feature transformation matrix for a speaker
+        dictionary_id: int or str, optional
+            Identifier for which lexicon compiler to use, if not specified, defaults to using the first lexicon compiler
+
+        Raises
+        ------
+        :class:`~kalpy.exceptions.AlignerError`
+            Raised when no alignment is generated
+
+        Returns
+        -------
+        :class:`~kalpy.gmm.data.Alignment`
+            Alignment object with list of transition IDs and other information for the utterance
+        """
         feats = utterance.generate_features(
             self.acoustic_model, fmllr_trans=fmllr_trans, cmvn=cmvn
         )
@@ -125,11 +176,31 @@ class KalpyAligner:
         fmllr_trans: FloatMatrix = None,
         dictionary_id: typing.Any = None,
     ) -> HierarchicalCtm:
-        lexicon_compiler = self.lexicon_compiler
-        if self.has_multiple_lexicons:
-            if dictionary_id is None:
-                dictionary_id = next(iter(self.lexicon_compiler.keys()))
-            lexicon_compiler = self.lexicon_compiler[dictionary_id]
+        """
+        Function for generating an :class:`~kalpy.gmm.data.Alignment` from an :class:`~kalpy.utterance.Utterance`
+
+        Parameters
+        ----------
+        utterance: :class:`~kalpy.utterance.Utterance`
+            Utterance to align
+        cmvn: :class:`~_kalpy.matrix.DoubleMatrix`, optional
+            CMVN transformation to use, if not provided, a CMVN transform will be applied based on the utterance features
+        fmllr_trans: :class:`~_kalpy.matrix.FloatMatrix`, optional
+            Feature transformation matrix for a speaker
+        dictionary_id: int or str, optional
+            Identifier for which lexicon compiler to use, if not specified, defaults to using the first lexicon compiler
+
+        Raises
+        ------
+        :class:`~kalpy.exceptions.AlignerError`
+            Raised when no alignment is generated
+
+        Returns
+        -------
+        :class:`~kalpy.gmm.data.HierarchicalCtm`
+            Hierarchical CTM object with word and phone intervals for the utterance
+        """
+        lexicon_compiler = self._get_lexicon_compiler(dictionary_id)
         aligner = (
             self.ali_aligner
             if fmllr_trans is None and self.ali_aligner is not None
@@ -148,56 +219,104 @@ class KalpyAligner:
         ctm.update_utterance_boundaries(utterance.segment.begin, utterance.segment.end)
         return ctm
 
+    def _get_lexicon_compiler(self, dictionary_id: typing.Any = None) -> LexiconCompiler:
+        """
+        Internal function for looking up the lexicon compiler for the specified key
+
+        Parameters
+        ----------
+        dictionary_id: int or str, optional
+            Key to look up lexicon compiler
+
+        Returns
+        -------
+        :class:`~kalpy.fstext.lexicon.LexiconCompiler`
+            Lexicon compiler
+        """
+        lexicon_compiler = self.lexicon_compiler
+        if self.has_multiple_lexicons:
+            if dictionary_id is None:
+                dictionary_id = next(iter(self.lexicon_compiler.keys()))
+            lexicon_compiler = self.lexicon_compiler[dictionary_id]
+        return lexicon_compiler
+
     def fine_tune_alignments(
         self,
         utterance: Utterance,
         alignment: Alignment = None,
+        boundary_tolerance: typing.Optional[float] = None,
         cmvn: DoubleMatrix = None,
         fmllr_trans: FloatMatrix = None,
+        dictionary_id: typing.Any = None,
     ) -> HierarchicalCtm:
-        lexicon_compiler = self.lexicon_compiler
-        graph_compiler = self.graph_compiler
+        """
+        Function for finetuning an :class:`~kalpy.gmm.data.Alignment` for an :class:`~kalpy.utterance.Utterance`
+
+        Parameters
+        ----------
+        utterance: :class:`~kalpy.utterance.Utterance`
+            Utterance to align
+        alignment: :class:`~kalpy.gmm.data.Alignment`, optional
+            Alignment to finetune, if not specified, alignment will be generated
+        boundary_tolerance: float, optional
+            The range around a boundary that it is allowed to be moved in seconds,
+            if not specified, it will default to two frames from the acoustic model features, one frame on either side
+        cmvn: :class:`~_kalpy.matrix.DoubleMatrix`, optional
+            CMVN transformation to use, if not provided, a CMVN transform will be applied based on the utterance features
+        fmllr_trans: :class:`~_kalpy.matrix.FloatMatrix`, optional
+            Feature transformation matrix for a speaker
+        dictionary_id: int or str, optional
+            Identifier for which lexicon compiler to use, if not specified, defaults to using the first lexicon compiler
+
+        Raises
+        ------
+        :class:`~kalpy.exceptions.AlignerError`
+            Raised when no alignment is generated
+
+        Returns
+        -------
+        :class:`~kalpy.gmm.data.HierarchicalCtm`
+            Hierarchical CTM object with word and phone intervals for the utterance
+        """
+        lexicon_compiler = self._get_lexicon_compiler(dictionary_id)
         aligner = (
             self.ali_aligner
             if fmllr_trans is None and self.ali_aligner is not None
             else self.aligner
         )
         if alignment is None:
-            feats = utterance.generate_features(
-                self.acoustic_model,
-                fmllr_trans=fmllr_trans,
-                cmvn=cmvn,
+            alignment = self._align_utterance(
+                utterance, cmvn=cmvn, fmllr_trans=fmllr_trans, dictionary_id=dictionary_id
             )
-            fst = graph_compiler.compile_fst(utterance.transcript)
-            alignment = aligner.align_utterance(fst, feats)
-            if alignment is None:
-                raise AlignerError(
-                    f"Could not align the file with the current beam size ({aligner.beam}, "
-                    "please try increasing the beam size via `--beam X`"
-                )
         split = SplitToPhones(aligner.transition_model, alignment.alignment)
         phone_intervals = []
         phone_start = 0.0
         original_start = 0.0
         feature_padding = 0.04
+        if boundary_tolerance is None:
+            boundary_tolerance = self.acoustic_model.frame_shift_seconds * 2
         for i, s in enumerate(split):
             phone_id = aligner.transition_model.TransitionIdToPhone(s[0])
-            num_repeats = len(s)
-            duration = self.acoustic_model.frame_shift_seconds * num_repeats
+            duration = len(s) * self.acoustic_model.frame_shift_seconds
             original_end = original_start + duration
             boundary = original_end
             label = lexicon_compiler.phone_table.find(phone_id)
             if i != len(split) - 1:
                 feature_segment_begin = max(
-                    round(boundary - boundary, 4),
+                    round(boundary - feature_padding, 4),
                     0,
                 )
                 feature_segment_end = min(
                     round(boundary + feature_padding, 4),
                     utterance.segment.end,
                 )
-                previous_phone_offset_window = self.acoustic_model.frame_shift_seconds / 2
-                following_phone_offset_window = self.acoustic_model.frame_shift_seconds / 2
+                following_phone_duration = (
+                    len(split[i + 1]) * self.acoustic_model.frame_shift_seconds
+                )
+                previous_phone_offset_window = min(boundary_tolerance, duration / 2) / 2
+                following_phone_offset_window = (
+                    min(boundary_tolerance, following_phone_duration / 2) / 2
+                )
                 begin_offset = round(
                     max(boundary - previous_phone_offset_window - feature_segment_begin, 0.0), 4
                 )

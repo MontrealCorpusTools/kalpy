@@ -972,6 +972,25 @@ class LexiconCompiler:
         transcription: bool = False,
         text: str = None,
     ) -> HierarchicalCtm:
+        """
+        Combine sequences of word symbols and phone intervals in a :class:`~kalpy.gmm.data.HierarchicalCtm`
+
+        Parameters
+        ----------
+        word_symbols: list[int]
+            Sequence of word symbols
+        intervals: list[:class:`~_kalpy.util.CtmInterval`]
+            Sequence of phone intervals
+        transcription: bool
+            Flag for whether the sequences were generated from a transcription lattice
+        text: str, optional
+            Original utterance text to map word symbols to
+
+        Returns
+        -------
+        :class:`~kalpy.gmm.data.HierarchicalCtm`
+            Hierarchical CTM object with word and phone intervals for the utterance
+        """
 
         phones = [x.symbol for x in intervals]
         word_splits = self._create_pronunciation_string(

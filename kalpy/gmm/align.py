@@ -28,14 +28,37 @@ logger.flush = lambda: None
 
 
 class GmmAligner:
+    """
+    Wrapper class around aligning with a GMM acoustic model
+
+    Parameters
+    ----------
+    acoustic_model_path: str or :class:`~pathlib.Path`
+        Path to acoustic model
+    beam: int
+        Size of the beam to use in decoding, defaults to 10
+    retry_beam : int
+        Size of the beam to use in decoding if it fails with the initial beam width, defaults to 40
+    transition_scale : float
+        Transition scale, defaults to 1.0
+    acoustic_scale : float
+        Acoustic scale, defaults to 0.1
+    self_loop_scale : float
+        Self-loop scale, defaults to 0.1
+    careful : bool
+        Flag for extra error checking on reaching final state, defaults to False
+    disambiguation_symbols : list[int], optional
+        List of symbols in phone table that correspond to disambiguation symbols
+    """
+
     def __init__(
         self,
         acoustic_model_path: typing.Union[pathlib.Path, str],
         acoustic_scale: float = 1.0,
         transition_scale: float = 1.0,
         self_loop_scale: float = 1.0,
-        beam: float = 10,
-        retry_beam: float = 40,
+        beam: int = 10,
+        retry_beam: int = 40,
         careful: bool = False,
         disambiguation_symbols: typing.List[int] = None,
     ):
@@ -62,6 +85,19 @@ class GmmAligner:
     def boost_silence(
         self, silence_weight: float, silence_phones: typing.List[int], only_silence: bool = True
     ):
+        """
+        Function to boost probabilities associated with silence states in the GMM
+
+        Parameters
+        ----------
+        silence_weight: float
+            Factor to boost silence by, 1.0 means no boosting, less than 1.0 decreases silence state probability,
+            greater than 1.0 increases silence probability
+        silence_phones: list[int]
+            Phone IDs corresponding to silence phones
+        only_silence: bool
+            Flag for whether to boost only states that are associated with silence phones and not speech phones
+        """
         if only_silence:
             self.acoustic_model.boost_only_silence(
                 self.transition_model, silence_phones, silence_weight
@@ -78,6 +114,27 @@ class GmmAligner:
         utterance_id: str = None,
         reference_phones: typing.List[typing.List[int]] = None,
     ) -> typing.Optional[Alignment]:
+        """
+
+        Parameters
+        ----------
+        training_graph: :class:`~_kalpy.fstext.VectorFst`
+            Training graph for the utterance
+        features: :class:`~_kalpy.matrix.FloatMatrix`
+            Feature matrix for the utterance
+        utterance_id: str, optional
+            Identifier for the utterance to store
+        reference_phones: list[list[int]], optional
+            Sequence of phones to use as reference and constrain alignments to only transition IDs corresponding to the
+            phones specified for each frame
+
+        Returns
+        -------
+        :class:`~kalpy.gmm.data.Alignment` or None
+            Alignment object with list of transition IDs and other information for the utterance. If the utterance could
+            not be aligned, returns None
+
+        """
         if reference_phones is None:
             (
                 alignment,
@@ -182,6 +239,23 @@ class GmmAligner:
         feature_archive: FeatureArchive,
         reference_phone_archive: RandomAccessInt32VectorVectorReader = None,
     ) -> typing.Generator[Alignment]:
+        """
+        Function for aligning all utterances in a training graph archive and feature archive
+
+        Parameters
+        ----------
+        training_graph_archive: :class:`~kalpy.decoder.data.FstArchive`
+            Archive of training graph FSTs per utterance
+        feature_archive: :class:`~kalpy.feat.data.FeatureArchive`
+            Archive of feature matrices per utterance
+        reference_phone_archive: :class:`~_kalpy.util.RandomAccessInt32VectorVectorReader`, optional
+            Archive of reference phone sequences per utterance
+
+        Yields
+        ------
+        :class:`~kalpy.gmm.data.Alignment`
+            Successful alignments, skipping utterances that could not be aligned
+        """
         logger.debug(f"Aligning with {self.acoustic_model_path}")
         num_done = 0
         num_error = 0
@@ -235,7 +309,29 @@ class GmmAligner:
         likelihood_file_name: typing.Union[pathlib.Path, str] = None,
         write_scp: bool = False,
         callback: typing.Callable = None,
-    ):
+    ) -> None:
+        """
+        Export alignments from training graph and features archives to an alignment archive file
+
+        Parameters
+        ----------
+        file_name: str or :class:`~pathlib.Path`
+            Alignment archive file path
+        training_graph_archive: :class:`~kalpy.decoder.data.FstArchive`
+            Archive of training graph FSTs per utterance
+        feature_archive: :class:`~kalpy.feat.data.FeatureArchive`
+            Archive of feature matrices per utterance
+        reference_phone_archive: :class:`~_kalpy.util.RandomAccessInt32VectorVectorReader`, optional
+            Archive of reference phone sequences per utterance
+        word_file_name: str or :class:`~pathlib.Path`, optional
+            File path to save word sequence
+        likelihood_file_name: str or :class:`~pathlib.Path`, optional
+            File path to save per frame log-likelihoods
+        write_scp: boolean
+            Flag for whether to write alignment archive with SCP file, defaults to False
+        callback: callable, optional
+            Callback to emit :class:`~kalpy.gmm.data.Alignment` objects as they're processed
+        """
         write_specifier = generate_write_specifier(file_name, write_scp)
         writer = Int32VectorWriter(write_specifier)
         word_writer = None
