@@ -19,6 +19,7 @@ if(KALDI_ROOT)
 
 endif()
 add_definitions(-DKALDI_NO_PORTAUDIO=1)
+add_definitions(-DOPENFST_VER=18400)
 if (MSVC)
     find_package(dlfcn-win32 REQUIRED)
     set(CMAKE_DL_LIBS dlfcn-win32::dl)
