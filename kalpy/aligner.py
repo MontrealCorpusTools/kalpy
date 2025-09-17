@@ -348,7 +348,9 @@ class KalpyAligner:
                     previous_transition_id,
                     following_transition_id,
                 )
-                boundary = round(begin_offset + (new_boundary_index * 0.001), 3)
+                boundary = round(
+                    feature_segment_begin + begin_offset + (new_boundary_index * 0.001), 3
+                )
             confidence = 0.0
             phone_intervals.append(
                 CtmInterval(
