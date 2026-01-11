@@ -1,1 +1,1 @@
-global-exclude *.alimdl *.mdl *.wav *.flac *.mat tree *.ipynb .github*
+global-exclude *.wav *.flac *.ipynb *.TextGrid .github*

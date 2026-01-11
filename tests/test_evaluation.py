@@ -83,7 +83,7 @@ def test_align_intervals(reference_hello_intervals, test_hi_intervals):
     mapping = {}
     silence_phone = "sil"
     alignment = align_intervals(
-        reference_hello_intervals, test_hi_intervals, silence_phone, mapping
+        reference_hello_intervals, test_hi_intervals, {silence_phone}, mapping
     )
     assert len(alignment) == 4
     for r, t in alignment:
@@ -98,7 +98,7 @@ def test_format_alignment(reference_hello_intervals, test_hi_intervals):
     mapping = {}
     silence_phone = "sil"
     alignment = align_intervals(
-        reference_hello_intervals, test_hi_intervals, silence_phone, mapping
+        reference_hello_intervals, test_hi_intervals, {silence_phone}, mapping
     )
     assert len(alignment) == 4
     for r, t in alignment:
@@ -117,7 +117,7 @@ def test_format_alignment(reference_hello_intervals, test_hi_intervals):
     mapping = {"ay": {"l"}}
     silence_phone = "sil"
     alignment = align_intervals(
-        reference_hello_intervals, test_hi_intervals, silence_phone, mapping
+        reference_hello_intervals, test_hi_intervals, {silence_phone}, mapping
     )
     assert len(alignment) == 4
     for r, t in alignment:

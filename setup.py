@@ -147,4 +147,6 @@ setup(
     python_requires=">=3.7",
     use_scm_version=True,
     setup_requires=["setuptools_scm"],
+    license="MIT",
+    license_files=("LICENSE",),
 )

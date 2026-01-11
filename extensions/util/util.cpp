@@ -23,23 +23,29 @@ struct Interval {
     Interval(const float &begin, const float &end, const std::string &label) : begin(begin), end(end), label(label) { }
     Interval() : begin(-1.0), end(-1.0), label("-") { }
 
+    virtual float duration() const{
+      if (begin == -1.0 || end == 1.0){
+        return 0.0;
+      }
+      return end - begin;
+    }
 
-    virtual float compare_labels(const std::string &other_label, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const{
+    virtual float compare_labels(const std::string &other_label, const std::set<std::string> &silence_phones, const std::map<std::string, std::set<std::string>> &mapping) const{
+        std::map<std::string, std::set<std::string>>::const_iterator pos = mapping.find(other_label);
         if (label == other_label){
             return 0.0;
         }
-        else if (label == silence_phone || other_label == silence_phone){
-            return 10.0;
-        }
-        std::map<std::string, std::set<std::string>>::const_iterator pos = mapping.find(other_label);
-        if (pos != mapping.end() && pos->second.find(label) != pos->second.end()){
+        else if (pos != mapping.end() && pos->second.find(label) != pos->second.end()){
             return 0.0;
+        }
+        else if (silence_phones.find(label) != silence_phones.end() || silence_phones.find(other_label) != silence_phones.end()){
+            return 10.0;
         }
         return 2.0;
     }
 
-    virtual float calculate_score(const Interval &other_interval, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const{
-        float score = compare_labels(other_interval.label, silence_phone, mapping);
+    virtual float calculate_score(const Interval &other_interval, const std::set<std::string> &silence_phones, const std::map<std::string, std::set<std::string>> &mapping) const{
+        float score = compare_labels(other_interval.label, silence_phones, mapping);
         if (begin >= 0.0 && end > 0.0){
           score += std::abs(begin - other_interval.begin);
           score += std::abs(end - other_interval.end);
@@ -55,12 +61,16 @@ struct Interval {
 struct PyInterval : Interval {
     using Interval::Interval; // Inherit constructors
 
-    float compare_labels(const std::string &other_label, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const override {
-      PYBIND11_OVERRIDE_PURE(float, Interval, compare_labels, other_label, silence_phone, mapping);
+    float duration() const override {
+      PYBIND11_OVERRIDE_PURE(float, Interval, duration);
     }
 
-    float calculate_score(const Interval &other_interval, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const override {
-      PYBIND11_OVERRIDE_PURE(float, Interval, calculate_score, other_interval, silence_phone, mapping);
+    float compare_labels(const std::string &other_label, const std::set<std::string> &silence_phones, const std::map<std::string, std::set<std::string>> &mapping) const override {
+      PYBIND11_OVERRIDE_PURE(float, Interval, compare_labels, other_label, silence_phones, mapping);
+    }
+
+    float calculate_score(const Interval &other_interval, const std::set<std::string> &silence_phones, const std::map<std::string, std::set<std::string>> &mapping) const override {
+      PYBIND11_OVERRIDE_PURE(float, Interval, calculate_score, other_interval, silence_phones, mapping);
     }
 };
 
@@ -77,23 +87,29 @@ struct CtmInterval {
       const std::string &label) : begin(begin), end(end), label(label), symbol(-1), confidence(0.0) { }
     CtmInterval() : begin(-1.0), end(-1.0), label("-"), symbol(-1), confidence(0.0) { }
 
+    virtual float duration() const{
+      if (begin == -1.0 || end == 1.0){
+        return 0.0;
+      }
+      return end - begin;
+    }
 
-    virtual float compare_labels(const std::string &other_label, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const{
+    virtual float compare_labels(const std::string &other_label, const std::set<std::string> &silence_phones, const std::map<std::string, std::set<std::string>> &mapping) const{
+        std::map<std::string, std::set<std::string>>::const_iterator pos = mapping.find(other_label);
         if (label == other_label){
             return 0.0;
         }
-        else if (label == silence_phone || other_label == silence_phone){
-            return 10.0;
-        }
-        std::map<std::string, std::set<std::string>>::const_iterator pos = mapping.find(other_label);
-        if (pos != mapping.end() && pos->second.find(label) != pos->second.end()){
+        else if (pos != mapping.end() && pos->second.find(label) != pos->second.end()){
             return 0.0;
+        }
+        else if (silence_phones.find(label) != silence_phones.end() || silence_phones.find(other_label) != silence_phones.end()){
+            return 10.0;
         }
         return 2.0;
     }
 
-    virtual float calculate_score(const CtmInterval &other_interval, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const{
-        float score = compare_labels(other_interval.label, silence_phone, mapping);
+    virtual float calculate_score(const CtmInterval &other_interval, const std::set<std::string> &silence_phones, const std::map<std::string, std::set<std::string>> &mapping) const{
+        float score = compare_labels(other_interval.label, silence_phones, mapping);
         if (begin >= 0.0 && end > 0.0){
           score += std::abs(begin - other_interval.begin);
           score += std::abs(end - other_interval.end);
@@ -111,12 +127,16 @@ struct CtmInterval {
 struct PyCtmInterval : CtmInterval {
     using CtmInterval::CtmInterval; // Inherit constructors
 
-    float compare_labels(const std::string &other_label, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const override {
-      PYBIND11_OVERRIDE_PURE(float, CtmInterval, compare_labels, other_label, silence_phone, mapping);
+    float duration() const override {
+      PYBIND11_OVERRIDE_PURE(float, CtmInterval, duration);
     }
 
-    float calculate_score(const CtmInterval &other_interval, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const override {
-      PYBIND11_OVERRIDE_PURE(float, CtmInterval, calculate_score, other_interval, silence_phone, mapping);
+    float compare_labels(const std::string &other_label, const std::set<std::string> &silence_phones, const std::map<std::string, std::set<std::string>> &mapping) const override {
+      PYBIND11_OVERRIDE_PURE(float, CtmInterval, compare_labels, other_label, silence_phones, mapping);
+    }
+
+    float calculate_score(const CtmInterval &other_interval, const std::set<std::string> &silence_phones, const std::map<std::string, std::set<std::string>> &mapping) const override {
+      PYBIND11_OVERRIDE_PURE(float, CtmInterval, calculate_score, other_interval, silence_phones, mapping);
     }
 };
 
@@ -127,22 +147,29 @@ struct WordCtmInterval {
       const std::vector<CtmInterval> &phones) : label(label), symbol(symbol), phones(phones) { }
     WordCtmInterval() :  label("-"), symbol(-1), phones() { }
 
-    virtual float compare_labels(const std::string &other_label, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const{
+    virtual float duration() const{
+      if (getBegin() == -1.0 || getEnd() == 1.0){
+        return 0.0;
+      }
+      return getEnd() - getBegin();
+    }
+
+    virtual float compare_labels(const std::string &other_label, const std::set<std::string> &silence_phones, const std::map<std::string, std::set<std::string>> &mapping) const{
+        std::map<std::string, std::set<std::string>>::const_iterator pos = mapping.find(other_label);
         if (label == other_label){
             return 0.0;
         }
-        else if (label == silence_phone || other_label == silence_phone){
-            return 10.0;
-        }
-        std::map<std::string, std::set<std::string>>::const_iterator pos = mapping.find(other_label);
-        if (pos != mapping.end() && pos->second.find(label) != pos->second.end()){
+        else if (pos != mapping.end() && pos->second.find(label) != pos->second.end()){
             return 0.0;
+        }
+        else if (silence_phones.find(label) != silence_phones.end() || silence_phones.find(other_label) != silence_phones.end()){
+            return 10.0;
         }
         return 2.0;
     }
 
-    virtual float calculate_score(const WordCtmInterval &other_interval, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const{
-        float score = compare_labels(other_interval.label, silence_phone, mapping);
+    virtual float calculate_score(const WordCtmInterval &other_interval, const std::set<std::string> &silence_phones, const std::map<std::string, std::set<std::string>> &mapping) const{
+        float score = compare_labels(other_interval.label, silence_phones, mapping);
         float begin = getBegin();
         float end = getEnd();
         if (begin >= 0.0 && end > 0.0){
@@ -187,12 +214,16 @@ struct WordCtmInterval {
 struct PyWordCtmInterval : WordCtmInterval {
     using WordCtmInterval::WordCtmInterval; // Inherit constructors
 
-    float compare_labels(const std::string &other_label, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const override {
-      PYBIND11_OVERRIDE_PURE(float, WordCtmInterval, compare_labels, other_label, silence_phone, mapping);
+    float duration() const override {
+      PYBIND11_OVERRIDE_PURE(float, WordCtmInterval, duration);
     }
 
-    float calculate_score(const WordCtmInterval &other_interval, const std::string &silence_phone, const std::map<std::string, std::set<std::string>> &mapping) const override {
-      PYBIND11_OVERRIDE_PURE(float, WordCtmInterval, calculate_score, other_interval, silence_phone, mapping);
+    float compare_labels(const std::string &other_label, const std::set<std::string> &silence_phones, const std::map<std::string, std::set<std::string>> &mapping) const override {
+      PYBIND11_OVERRIDE_PURE(float, WordCtmInterval, compare_labels, other_label, silence_phones, mapping);
+    }
+
+    float calculate_score(const WordCtmInterval &other_interval, const std::set<std::string> &silence_phones, const std::map<std::string, std::set<std::string>> &mapping) const override {
+      PYBIND11_OVERRIDE_PURE(float, WordCtmInterval, calculate_score, other_interval, silence_phones, mapping);
     }
 };
 
@@ -240,7 +271,7 @@ template<typename IntervalType>
 IntervalAlignment<IntervalType> align_intervals(
   const std::vector<IntervalType> &reference_intervals,
   const std::vector<IntervalType> &hypothesis_intervals,
-  const std::string &silence_phone,
+  const std::set<std::string> &silence_phones,
   const std::map<std::string, std::set<std::string>> &mapping) {
 
             py::gil_scoped_release release;
@@ -256,9 +287,9 @@ IntervalAlignment<IntervalType> align_intervals(
             for (m = 1; m <= M; m++) {
               e[m][0] = e[m-1][0] + 1;
               for (n = 1; n <= N; n++) {
-                float sub_or_ok = e[m-1][n-1] + reference_intervals[m-1].calculate_score(hypothesis_intervals[n-1], silence_phone, mapping);
-                float del = e[m-1][n] + 1.0;  // assumes a == ref, b == hyp.
-                float ins = e[m][n-1] + 1.0;
+                float sub_or_ok = e[m-1][n-1] + reference_intervals[m-1].calculate_score(hypothesis_intervals[n-1], silence_phones, mapping);
+                float del = e[m-1][n] + 1.0 + reference_intervals[m-1].duration();  // assumes a == ref, b == hyp.
+                float ins = e[m][n-1] + 1.0 + hypothesis_intervals[n-1].duration();
                 e[m][n] = std::min(sub_or_ok, std::min(del, ins));
               }
             }
@@ -274,9 +305,9 @@ IntervalAlignment<IntervalType> align_intervals(
                 last_m = m-1;
                 last_n = n;
               } else {
-                float sub_or_ok = e[m-1][n-1] + reference_intervals[m-1].calculate_score(hypothesis_intervals[n-1], silence_phone, mapping);
-                float del = e[m-1][n] + 1.0;  // assumes a == ref, b == hyp.
-                float ins = e[m][n-1] + 1.0;
+                float sub_or_ok = e[m-1][n-1] + reference_intervals[m-1].calculate_score(hypothesis_intervals[n-1], silence_phones, mapping);
+                float del = e[m-1][n] + 1.0 + reference_intervals[m-1].duration();  // assumes a == ref, b == hyp.
+                float ins = e[m][n-1] + 1.0 + hypothesis_intervals[n-1].duration();
                 // choose sub_or_ok if all else equal.
                 if (sub_or_ok <= std::min(del, ins)) {
                   last_m = m-1;
@@ -580,12 +611,12 @@ void init_util(py::module &_m) {
         .def("compare_labels", &Interval::compare_labels,
           "Score two labels based on whether they match or count as the same phone based on the mapping",
             py::arg("other_label"),
-            py::arg("silence_phone"),
+            py::arg("silence_phones"),
             py::arg("mapping"))
         .def("calculate_score", &Interval::calculate_score,
           "Method to calculate overlap scoring",
             py::arg("other_interval"),
-            py::arg("silence_phone"),
+            py::arg("silence_phones"),
             py::arg("mapping"))
         .def("__add__",
               [](Interval &a, const float other) {
@@ -665,12 +696,12 @@ void init_util(py::module &_m) {
         .def("compare_labels", &CtmInterval::compare_labels,
           "Score two labels based on whether they match or count as the same phone based on the mapping",
             py::arg("other_label"),
-            py::arg("silence_phone"),
+            py::arg("silence_phones"),
             py::arg("mapping"))
         .def("calculate_score", &CtmInterval::calculate_score,
           "Method to calculate overlap scoring",
             py::arg("other_interval"),
-            py::arg("silence_phone"),
+            py::arg("silence_phones"),
             py::arg("mapping"))
         .def("__add__",
               [](CtmInterval &a, const float other) {
@@ -743,12 +774,12 @@ void init_util(py::module &_m) {
         .def("compare_labels", &WordCtmInterval::compare_labels,
           "Score two labels based on whether they match or count as the same phone based on the mapping",
             py::arg("other_label"),
-            py::arg("silence_phone"),
+            py::arg("silence_phones"),
             py::arg("mapping"))
         .def("calculate_score", &WordCtmInterval::calculate_score,
           "Method to calculate overlap scoring",
             py::arg("other_interval"),
-            py::arg("silence_phone"),
+            py::arg("silence_phones"),
             py::arg("mapping"))
         .def("__lt__",
               [](const WordCtmInterval &a, const WordCtmInterval &other) {
@@ -866,7 +897,7 @@ void init_util(py::module &_m) {
     "different labels to be scored as if they're the same",
           py::arg("reference_intervals"),
           py::arg("hypothesis_intervals"),
-          py::arg("silence_phone"),
+          py::arg("silence_phones"),
           py::arg("mapping"),
           py::return_value_policy::take_ownership
           );
@@ -877,7 +908,7 @@ void init_util(py::module &_m) {
     "different labels to be scored as if they're the same",
           py::arg("reference_intervals"),
           py::arg("hypothesis_intervals"),
-          py::arg("silence_phone"),
+          py::arg("silence_phones"),
           py::arg("mapping"),
           py::return_value_policy::take_ownership
           );
@@ -888,7 +919,7 @@ void init_util(py::module &_m) {
     "different labels to be scored as if they're the same",
           py::arg("reference_intervals"),
           py::arg("hypothesis_intervals"),
-          py::arg("silence_phone"),
+          py::arg("silence_phones"),
           py::arg("mapping"),
           py::return_value_policy::take_ownership
           );

@@ -60,6 +60,8 @@ def to_tg_interval(
         raise CtmError(interval)
     end = round(interval.end, 6)
     begin = round(interval.begin, 6)
+    if begin < 0:
+        begin = 0
     if file_duration is not None and end > file_duration:
         end = round(file_duration, 6)
     assert begin < end

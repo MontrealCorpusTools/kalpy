@@ -14,7 +14,7 @@ if typing.TYPE_CHECKING:
 def compare_labels(
     reference_label: str,
     test_label: str,
-    silence_phone: str,
+    silence_phones: typing.Set[str],
     mapping: typing.Optional[typing.Dict[str, typing.Collection[str]]] = None,
 ) -> int:
     """
@@ -26,7 +26,7 @@ def compare_labels(
         Reference label
     test_label: str
         Label to compare to reference label
-    silence_phone: str
+    silence_phones: set[str]
         Label corresponding to optionally inserted silence
     mapping: Optional[dict[str, set[str]]]
         Mapping to form equivalence between different label sets
@@ -38,8 +38,6 @@ def compare_labels(
     """
     if reference_label == test_label:
         return 0
-    if reference_label == silence_phone or test_label == silence_phone:
-        return 10
     if mapping is not None and test_label in mapping:
         if isinstance(mapping[test_label], str):
             if mapping[test_label] == reference_label:
@@ -50,13 +48,15 @@ def compare_labels(
     test = test_label.lower()
     if ref == test:
         return 0
+    if reference_label in silence_phones or test_label in silence_phones:
+        return 10
     return 2
 
 
 def overlap_scoring(
     first_element: CtmInterval,
     second_element: CtmInterval,
-    silence_phone: str,
+    silence_phones: typing.Set[str],
     mapping: typing.Optional[typing.Dict[str, str]] = None,
 ) -> float:
     r"""
@@ -80,8 +80,8 @@ def overlap_scoring(
         First CTM interval to compare
     second_element: :class:`~montreal_forced_aligner.data.CtmInterval`
         Second CTM interval
-    silence_phone: str
-        Label corresponding to optionally inserted silence
+    silence_phones: set[str]
+        Labels corresponding to optionally inserted silence
     mapping: Optional[dict[str, str]]
         Optional mapping of phones to treat as matches even if they have different symbols
 
@@ -93,7 +93,7 @@ def overlap_scoring(
     """
     begin_diff = abs(first_element.begin - second_element.begin)
     end_diff = abs(first_element.end - second_element.end)
-    label_diff = compare_labels(first_element.label, second_element.label, silence_phone, mapping)
+    label_diff = compare_labels(first_element.label, second_element.label, silence_phones, mapping)
     return -1 * (begin_diff + end_diff + label_diff)
 
 
@@ -141,11 +141,17 @@ def fix_many_to_one_alignments(
 def align_phones(
     ref: typing.List[CtmInterval],
     test: typing.List[CtmInterval],
-    silence_phone: str,
+    silence_phones: typing.Union[str, typing.Set[str]],
     ignored_phones: typing.Set[str] = None,
-    custom_mapping: typing.Optional[typing.Dict[str, str]] = None,
+    custom_mapping: typing.Optional[typing.Dict[str, typing.Set[str]]] = None,
     debug: bool = False,
-) -> typing.Tuple[float, float, typing.Dict[typing.Tuple[str, str], int]]:
+) -> typing.Tuple[
+    float,
+    float,
+    typing.Dict[typing.Tuple[str, str], int],
+    float,
+    typing.List[typing.Dict[str, typing.Any]],
+]:
     """
     Align phones based on how much they overlap and their phone label, with the ability to specify a custom mapping for
     different phone labels to be scored as if they're the same phone
@@ -156,11 +162,11 @@ def align_phones(
         List of CTM intervals as reference
     test: list[:class:`~montreal_forced_aligner.data.CtmInterval`]
         List of CTM intervals to compare to reference
-    silence_phone: str
-        Silence phone (these are ignored in the final calculation)
+    silence_phones: str or set[str]
+        Silence phones (these are ignored in the final calculation)
     ignored_phones: set[str], optional
         Phones that should be ignored in score calculations (silence phone is automatically added)
-    custom_mapping: dict[str, str], optional
+    custom_mapping: dict[str, set[str]], optional
         Mapping of phones to treat as matches even if they have different symbols
     debug: bool, optional
         Flag for logging extra information about alignments
@@ -173,31 +179,46 @@ def align_phones(
         Phone error rate
     dict[tuple[str, str], int]
         Dictionary of error pairs with their counts
+    float
+        Edit distance score of alignment
+    list[dict[str, any]]
+        Boundary errors
     """
-
+    if isinstance(silence_phones, str):
+        silence_phones = {silence_phones}
     if ignored_phones is None:
         ignored_phones = set()
     if not isinstance(ignored_phones, set):
         ignored_phones = set(ignored_phones)
     if custom_mapping is None:
         custom_mapping = {}
+    else:
+        for k, v in custom_mapping.items():
+            if k in silence_phones:
+                if isinstance(v, str):
+                    silence_phones.add(v)
+                else:
+                    silence_phones.update(v)
+            elif v | silence_phones:
+                silence_phones.add(k)
+    ignored_phones.update(silence_phones)
     try:
-        alignment = align_intervals(ref, test, silence_phone, custom_mapping)
+        alignment = align_intervals(ref, test, silence_phones, custom_mapping)
     except Exception:
         print(ref)
         print(test)
         raise
     if custom_mapping is not None:
         ref, test = fix_many_to_one_alignments(alignment, custom_mapping)
-        alignment = align_intervals(ref, test, silence_phone, custom_mapping)
+        alignment = align_intervals(ref, test, silence_phones, custom_mapping)
     overlap_count = 0
     overlap_sum = 0
     num_insertions = 0
     num_deletions = 0
     num_substitutions = 0
     errors = collections.Counter()
-    ignored_phones.add(silence_phone)
-    for sa, sb in alignment.alignment:
+    boundary_errors = []
+    for i, (sa, sb) in enumerate(alignment.alignment):
         if sa.label == "-":
             if sb.label not in ignored_phones:
                 errors[(sa.label, sb.label)] += 1
@@ -211,15 +232,29 @@ def align_phones(
             else:
                 continue
         else:
+            if i != 0:
+                prev_sa, prev_sb = alignment.alignment[i - 1]
+                if prev_sa.label != "-" and prev_sb.label != "-":
+                    boundary_errors.append(
+                        {
+                            "following_reference_phone": sa.label,
+                            "following_test_phone": sb.label,
+                            "previous_reference_phone": prev_sa.label,
+                            "previous_test_phone": prev_sb.label,
+                            "boundary_error": round(sa.begin - sb.begin, 3),
+                            "reference_boundary": round(sa.begin, 3),
+                            "test_boundary": round(sb.begin, 3),
+                        }
+                    )
             if sa.label in ignored_phones:
                 continue
             overlap_sum += (abs(sa.begin - sb.begin) + abs(sa.end - sb.end)) / 2
             overlap_count += 1
-            if compare_labels(sa.label, sb.label, silence_phone, mapping=custom_mapping) > 0:
+            if compare_labels(sa.label, sb.label, silence_phones, mapping=custom_mapping) > 0:
                 num_substitutions += 1
                 errors[(sa.label, sb.label)] += 1
     if overlap_count:
-        score = overlap_sum / overlap_count
+        score = round(overlap_sum / overlap_count, 3)
     else:
         score = None
     phone_error_rate = (num_insertions + num_deletions + (2 * num_substitutions)) / len(ref)
@@ -227,8 +262,13 @@ def align_phones(
         import logging
 
         logger = logging.getLogger("mfa")
-        logger.debug(f"{format_alignment(alignment)}\nPER: {phone_error_rate}\nErrors: {errors}")
-    return score, phone_error_rate, errors
+        if errors:
+            logger.debug(
+                f"PER: {phone_error_rate}\nErrors: {errors}\n{format_alignment(alignment)}"
+            )
+        else:
+            logger.debug(f"PER: {phone_error_rate}\n{format_alignment(alignment)}")
+    return score, phone_error_rate, errors, alignment.score, boundary_errors
 
 
 def fix_unk_words(
@@ -262,7 +302,7 @@ def fix_unk_words(
             if w not in mapping:
                 mapping[w] = {lexicon_compiler.oov_word}
 
-    alignment = align_intervals(ref_intervals, test, lexicon_compiler.silence_word, {})
+    alignment = align_intervals(ref_intervals, test, {lexicon_compiler.silence_word}, {})
     output_ctm = []
     for sa, sb in alignment.alignment:
         if sa.label == "-":
@@ -279,7 +319,7 @@ def fix_unk_words(
 def align_words(
     ref: typing.Union[typing.List[str], typing.List[CtmInterval]],
     test: typing.List[CtmInterval],
-    silence_word: str,
+    silence_words: typing.Union[str, typing.Set[str]],
     ignored_words: typing.Set[str] = None,
     debug: bool = False,
 ) -> typing.Tuple[float, float, float]:
@@ -292,7 +332,7 @@ def align_words(
         List of CTM intervals as reference
     test: list[:class:`~montreal_forced_aligner.data.CtmInterval`]
         List of CTM intervals to compare to reference
-    silence_word: str
+    silence_words: str or set[str]
         Silence word (these are ignored in the final calculation)
     ignored_words: set[str], optional
         Words that should be ignored in score calculations (silence phone is automatically added)
@@ -309,23 +349,25 @@ def align_words(
         Aligned duration of found words
     """
 
+    if isinstance(silence_words, str):
+        silence_words = {silence_words}
     if ignored_words is None:
         ignored_words = set()
     if not isinstance(ignored_words, set):
         ignored_words = set(ignored_words)
+    ignored_words.update(silence_words)
     ref_intervals = []
     for w in ref:
         if not isinstance(w, CtmInterval):
             ref_intervals.append(CtmInterval(0.0, 0.0, w))
         else:
             ref_intervals.append(w)
-    alignment = align_intervals(ref_intervals, test, silence_word, {})
+    alignment = align_intervals(ref_intervals, test, silence_words, {})
 
     num_insertions = 0
     num_deletions = 0
     num_substitutions = 0
 
-    ignored_words.add(silence_word)
     extra_duration = 0
     aligned_duration = 0
     for sa, sb in alignment.alignment:

@@ -499,7 +499,6 @@ class LexiconCompiler:
     def _create_word_fst(
         self, pronunciation: Pronunciation, phonological_rule_fst: pynini.Fst = None
     ):
-
         pron = pronunciation.pronunciation
         if self.position_dependent_phones:
             phones = pronunciation.pronunciation.split()
@@ -642,8 +641,8 @@ class LexiconCompiler:
         elif probability < 0.01:
             probability = 0.01  # Dithering to ensure low probability entries
         pron_cost = abs(math.log(probability))
-        start_index = self._fst.num_states() - 1
-        align_start_index = self._align_fst.num_states()
+        start_index = self.fst.num_states() - 1
+        align_start_index = self.align_fst.num_states()
         num_new_states = fst.num_states() - 1
         self._fst.add_states(num_new_states)
         self._align_fst.add_states(num_new_states + 2)

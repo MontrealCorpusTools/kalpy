@@ -61,6 +61,7 @@ class GmmAligner:
         retry_beam: int = 40,
         careful: bool = False,
         disambiguation_symbols: typing.List[int] = None,
+        silence_phones: typing.List[int] = None,
     ):
         self.acoustic_model_path = str(acoustic_model_path)
         self.transition_model, self.acoustic_model = read_gmm_model(self.acoustic_model_path)
@@ -70,6 +71,7 @@ class GmmAligner:
         self.beam = beam
         self.retry_beam = retry_beam
         self.careful = careful
+        self.silence_phones = silence_phones
 
         self.num_done = 0
         self.num_error = 0
@@ -82,9 +84,7 @@ class GmmAligner:
         if self.beam >= self.retry_beam:
             self.retry_beam = 4 * self.beam
 
-    def boost_silence(
-        self, silence_weight: float, silence_phones: typing.List[int], only_silence: bool = True
-    ):
+    def boost_silence(self, silence_weight: float, only_silence: bool = True):
         """
         Function to boost probabilities associated with silence states in the GMM
 
@@ -100,11 +100,11 @@ class GmmAligner:
         """
         if only_silence:
             self.acoustic_model.boost_only_silence(
-                self.transition_model, silence_phones, silence_weight
+                self.transition_model, self.silence_phones, silence_weight
             )
         else:
             self.acoustic_model.boost_silence(
-                self.transition_model, silence_phones, silence_weight
+                self.transition_model, self.silence_phones, silence_weight
             )
 
     def align_utterance(
@@ -113,6 +113,12 @@ class GmmAligner:
         features: FloatMatrix,
         utterance_id: str = None,
         reference_phones: typing.List[typing.List[int]] = None,
+        beam: int = None,
+        retry_beam: int = None,
+        boost_silence: float = None,
+        acoustic_scale: float = None,
+        transition_scale: float = None,
+        self_loop_scale: float = None,
     ) -> typing.Optional[Alignment]:
         """
 
@@ -135,6 +141,19 @@ class GmmAligner:
             not be aligned, returns None
 
         """
+        if boost_silence is not None:
+            self.boost_silence(boost_silence)
+        alignment_parameters = {
+            "beam": self.beam if not beam else beam,
+            "retry_beam": self.retry_beam if not retry_beam else retry_beam,
+            "acoustic_scale": self.acoustic_scale if not acoustic_scale else acoustic_scale,
+            "transition_scale": self.transition_scale
+            if not transition_scale
+            else transition_scale,
+            "self_loop_scale": self.self_loop_scale if not self_loop_scale else self_loop_scale,
+        }
+        if alignment_parameters["retry_beam"] <= alignment_parameters["beam"]:
+            alignment_parameters["retry_beam"] = alignment_parameters["beam"] * 4
         if reference_phones is None:
             (
                 alignment,
@@ -148,12 +167,8 @@ class GmmAligner:
                 self.acoustic_model,
                 training_graph,
                 features,
-                acoustic_scale=self.acoustic_scale,
-                transition_scale=self.transition_scale,
-                self_loop_scale=self.self_loop_scale,
-                beam=self.beam,
-                retry_beam=self.retry_beam,
                 careful=self.careful,
+                **alignment_parameters,
             )
         else:
             logger.debug(f"Using reference phones in alignment for {utterance_id}")
@@ -171,12 +186,8 @@ class GmmAligner:
                 training_graph,
                 features,
                 reference_phones,
-                acoustic_scale=self.acoustic_scale,
-                transition_scale=self.transition_scale,
-                self_loop_scale=self.self_loop_scale,
-                beam=self.beam,
-                retry_beam=self.retry_beam,
                 careful=self.careful,
+                **alignment_parameters,
             )
             if successful:
                 redo = False
@@ -212,12 +223,8 @@ class GmmAligner:
                         training_graph,
                         features,
                         reference_phones,
-                        acoustic_scale=self.acoustic_scale,
-                        transition_scale=self.transition_scale,
-                        self_loop_scale=self.self_loop_scale,
-                        beam=self.beam,
-                        retry_beam=self.retry_beam,
                         careful=self.careful,
+                        **alignment_parameters,
                     )
                     for i in range(len(reference_phones)):
                         if (
@@ -227,6 +234,8 @@ class GmmAligner:
                             logger.debug(
                                 f"Mismatch in frame {i}! {alignment_phones[i]} should be {reference_phones[i]}"
                             )
+        if boost_silence is not None:
+            self.boost_silence(1 / boost_silence)
         if not successful:
             return None
         if retried and utterance_id:
@@ -238,6 +247,7 @@ class GmmAligner:
         training_graph_archive: FstArchive,
         feature_archive: FeatureArchive,
         reference_phone_archive: RandomAccessInt32VectorVectorReader = None,
+        utterance_parameters: typing.Dict[str, typing.Dict[str, typing.Any]] = None,
     ) -> typing.Generator[Alignment]:
         """
         Function for aligning all utterances in a training graph archive and feature archive
@@ -277,8 +287,9 @@ class GmmAligner:
                     reference_phones = reference_phone_archive.Value(utterance_id)
             try:
                 logger.debug(f"Processing {utterance_id}")
+                parameters = utterance_parameters.get(utterance_id, {})
                 alignment = self.align_utterance(
-                    training_graph, feats, utterance_id, reference_phones
+                    training_graph, feats, utterance_id, reference_phones, **parameters
                 )
                 if alignment is None:
                     yield utterance_id, None
@@ -309,6 +320,7 @@ class GmmAligner:
         likelihood_file_name: typing.Union[pathlib.Path, str] = None,
         write_scp: bool = False,
         callback: typing.Callable = None,
+        utterance_parameters: typing.Dict[str, typing.Dict[str, typing.Any]] = None,
     ) -> None:
         """
         Export alignments from training graph and features archives to an alignment archive file
@@ -347,6 +359,7 @@ class GmmAligner:
                 training_graph_archive,
                 feature_archive,
                 reference_phone_archive=reference_phone_archive,
+                utterance_parameters=utterance_parameters,
             ):
                 if alignment is None:
                     continue
