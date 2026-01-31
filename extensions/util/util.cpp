@@ -24,7 +24,7 @@ struct Interval {
     Interval() : begin(-1.0), end(-1.0), label("-") { }
 
     virtual float duration() const{
-      if (begin == -1.0 || end == 1.0){
+      if (begin == -1.0 || end == -1.0){
         return 0.0;
       }
       return end - begin;
@@ -148,7 +148,7 @@ struct WordCtmInterval {
     WordCtmInterval() :  label("-"), symbol(-1), phones() { }
 
     virtual float duration() const{
-      if (getBegin() == -1.0 || getEnd() == 1.0){
+      if (getBegin() == -1.0 || getEnd() == -1.0){
         return 0.0;
       }
       return getEnd() - getBegin();

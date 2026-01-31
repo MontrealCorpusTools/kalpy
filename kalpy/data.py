@@ -4,8 +4,8 @@ from __future__ import annotations
 import os.path
 import pathlib
 import typing
+from dataclasses import dataclass
 
-import dataclassy
 import librosa
 import numpy as np
 
@@ -21,7 +21,7 @@ from kalpy.utils import generate_read_specifier
 PathLike = typing.Union[str, pathlib.Path]
 
 
-@dataclassy.dataclass
+@dataclass
 class Segment:
     """
     Data class for information about acoustic segments

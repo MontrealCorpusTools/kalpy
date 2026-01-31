@@ -11,12 +11,13 @@ def test_intervals():
     assert i.label == "hello"
     mapping = {}
     silence_phone = "sil"
-    assert i.compare_labels(silence_phone, silence_phone, mapping) == 10
-    assert i.compare_labels("hello", silence_phone, mapping) == 0.0
-    assert i.compare_labels("other_hello", silence_phone, mapping) == 2.0
+    silence_phones = {silence_phone}
+    assert i.compare_labels(silence_phone, silence_phones, mapping) == 10
+    assert i.compare_labels("hello", silence_phones, mapping) == 0.0
+    assert i.compare_labels("other_hello", silence_phones, mapping) == 2.0
 
     mapping = {"other_hello": {"hello"}}
-    assert i.compare_labels("other_hello", silence_phone, mapping) == 0.0
+    assert i.compare_labels("other_hello", silence_phones, mapping) == 0.0
 
     i_data = pickle.dumps(i)
     i_new = pickle.loads(i_data)
@@ -33,12 +34,13 @@ def test_ctm_intervals():
     assert i.symbol == 0
     mapping = {}
     silence_phone = "sil"
-    assert i.compare_labels(silence_phone, silence_phone, mapping) == 10
-    assert i.compare_labels("hello", silence_phone, mapping) == 0.0
-    assert i.compare_labels("other_hello", silence_phone, mapping) == 2.0
+    silence_phones = {silence_phone}
+    assert i.compare_labels(silence_phone, silence_phones, mapping) == 10
+    assert i.compare_labels("hello", silence_phones, mapping) == 0.0
+    assert i.compare_labels("other_hello", silence_phones, mapping) == 2.0
 
     mapping = {"other_hello": {"hello"}}
-    assert i.compare_labels("other_hello", silence_phone, mapping) == 0.0
+    assert i.compare_labels("other_hello", silence_phones, mapping) == 0.0
 
     i_data = pickle.dumps(i)
     i_new = pickle.loads(i_data)
@@ -60,12 +62,13 @@ def test_word_ctm_intervals():
     assert w.phones[0].symbol == 0
     mapping = {}
     silence_phone = "sil"
-    assert w.compare_labels(silence_phone, silence_phone, mapping) == 10
-    assert w.compare_labels("hello", silence_phone, mapping) == 0.0
-    assert w.compare_labels("other_hello", silence_phone, mapping) == 2.0
+    silence_phones = {silence_phone}
+    assert w.compare_labels(silence_phone, silence_phones, mapping) == 10
+    assert w.compare_labels("hello", silence_phones, mapping) == 0.0
+    assert w.compare_labels("other_hello", silence_phones, mapping) == 2.0
 
     mapping = {"other_hello": {"hello"}}
-    assert w.compare_labels("other_hello", silence_phone, mapping) == 0.0
+    assert w.compare_labels("other_hello", silence_phones, mapping) == 0.0
 
     w_data = pickle.dumps(w)
     w_new = pickle.loads(w_data)
@@ -112,7 +115,7 @@ def test_format_alignment(reference_hello_intervals, test_hi_intervals):
     assert "hh eh l ow" in formatted
     assert "   |  .      " in formatted
     assert "hh ay - -" in formatted
-    assert "Score=4" in formatted
+    assert "Score=6" in formatted
 
     mapping = {"ay": {"l"}}
     silence_phone = "sil"
@@ -134,4 +137,4 @@ def test_format_alignment(reference_hello_intervals, test_hi_intervals):
     assert "hh eh l  ow" in formatted
     assert "|     . " in formatted
     assert "hh -  ay -" in formatted
-    assert "Score=4" in formatted
+    assert "Score=6" in formatted

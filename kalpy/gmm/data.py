@@ -5,8 +5,8 @@ import os
 import pathlib
 import sys
 import typing
+from dataclasses import dataclass
 
-import dataclassy
 import numpy as np
 import pywrapfst
 from praatio import textgrid as tgio
@@ -68,7 +68,7 @@ def to_tg_interval(
     return PraatInterval(round(interval.begin, 6), end, interval.label)
 
 
-@dataclassy.dataclass
+@dataclass
 class HierarchicalCtm:
     word_intervals: typing.List[WordCtmInterval]
     text: str = None
@@ -151,7 +151,7 @@ class HierarchicalCtm:
             self.word_intervals[-1].phones[-1].end = end
 
 
-@dataclassy.dataclass
+@dataclass
 class Alignment:
     utterance_id: str
     alignment: typing.List[int]

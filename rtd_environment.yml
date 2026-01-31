@@ -5,7 +5,6 @@ dependencies:
   - numpy
   - librosa
   - praatio>=6.0.0
-  - dataclassy
   - pynini
   - sphinx
   - numpydoc

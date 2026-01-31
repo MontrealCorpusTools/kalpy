@@ -71,6 +71,8 @@ class GmmAligner:
         self.beam = beam
         self.retry_beam = retry_beam
         self.careful = careful
+        if silence_phones is None:
+            silence_phones = set()
         self.silence_phones = silence_phones
 
         self.num_done = 0
@@ -271,6 +273,8 @@ class GmmAligner:
         num_error = 0
         total_frames = 0
         total_likelihood = 0
+        if utterance_parameters is None:
+            utterance_parameters = {}
         for utterance_id, feats in feature_archive:
             if feats.NumRows() == 0:
                 logger.warning(f"Skipping {utterance_id} due to zero-length features")

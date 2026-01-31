@@ -2,8 +2,7 @@
 from __future__ import annotations
 
 import typing
-
-import dataclassy
+from dataclasses import dataclass
 
 from _kalpy.feat import (
     DeltaFeaturesOptions,
@@ -23,7 +22,7 @@ if typing.TYPE_CHECKING:
     from kalpy.models import AcousticModel
 
 
-@dataclassy.dataclass
+@dataclass
 class Utterance:
     segment: Segment
     transcript: str

@@ -199,7 +199,7 @@ def align_phones(
                     silence_phones.add(v)
                 else:
                     silence_phones.update(v)
-            elif v | silence_phones:
+            elif v & silence_phones:
                 silence_phones.add(k)
     ignored_phones.update(silence_phones)
     try:

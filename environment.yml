@@ -15,7 +15,6 @@ dependencies:
   - pybind11
   - pytest
   - pip
-  - dataclassy
   - pyyaml
   - praatio
   - pytest-order

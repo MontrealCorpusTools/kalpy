@@ -5,10 +5,9 @@ import collections
 import math
 import pathlib
 import re
-import threading
 import typing
+from dataclasses import dataclass
 
-import dataclassy
 import pynini
 import pywrapfst
 
@@ -18,7 +17,7 @@ from kalpy.exceptions import LexiconError, PhonesToPronunciationsError
 from kalpy.gmm.data import CtmInterval, HierarchicalCtm, WordCtmInterval
 
 
-@dataclassy.dataclass
+@dataclass
 class Pronunciation:
     """
     Data class for storing information about a particular pronunciation
