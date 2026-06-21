@@ -27,7 +27,7 @@ class Segment:
     Data class for information about acoustic segments
     """
 
-    file_path: str
+    file_path: PathLike
     begin: typing.Optional[float] = 0.0
     end: typing.Optional[float] = None
     channel: typing.Optional[int] = 0

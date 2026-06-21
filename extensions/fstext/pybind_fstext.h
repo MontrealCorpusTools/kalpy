@@ -12,6 +12,7 @@
 #include "fst/script/print-impl.h"
 #include "fst/fstlib.h"
 #include "fstext/fstext-utils.h"
+#include "fstext/table-matcher.h"
 #include "fstext/kaldi-fst-io.h"
 #include "fstext/lattice-utils.h"
 #include "fstext/lattice-utils-inl.h"

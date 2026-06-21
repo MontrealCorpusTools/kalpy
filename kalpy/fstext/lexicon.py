@@ -100,9 +100,9 @@ class LexiconCompiler:
         Probability of silence following words
     initial_silence_probability: float
         Probability of silence at the beginning of utterances
-    final_silence_correction: float
+    final_silence_correction: float, optional
         Correction factor for utterances ending in silence
-    final_non_silence_correction: float
+    final_non_silence_correction: float, optional
         Correction factor for utterances not ending in silence
     silence_word: str
         Word symbol to use for silence
@@ -131,8 +131,6 @@ class LexiconCompiler:
     pronunciations: list[:class:`~kalpy.fstext.lexicon.Pronunciation`]
         List of pronunciations loaded from dictionary file
     """
-
-    use_g2p = False
 
     def __init__(
         self,
@@ -1044,84 +1042,4 @@ class LexiconCompiler:
                 )
         if not word_intervals[-1].phones:
             del word_intervals[-1]
-        return HierarchicalCtm(word_intervals, text=text)
-
-
-class G2PCompiler(LexiconCompiler):
-    use_g2p = True
-
-    def __init__(
-        self,
-        fst: pynini.Fst,
-        grapheme_table: pywrapfst.SymbolTable,
-        phone_table: pywrapfst.SymbolTable,
-        silence_phone: str = "sil",
-        silence_word: str = "<eps>",
-        align_fst: typing.Optional[pynini.Fst] = None,
-        position_dependent_phones: bool = False,
-    ):
-        self._fst = fst
-        self._align_fst = align_fst
-        self._align_fst.invert()
-        self.word_table = grapheme_table
-        self.phone_table = phone_table
-        self.silence_phone = silence_phone
-        self.silence_word = silence_word
-        self.word_begin_label = "#1"
-        self.word_end_label = "#2"
-        self.position_dependent_phones = position_dependent_phones
-        self.disambiguation = False
-
-    def phones_to_pronunciations(
-        self,
-        word_symbols: typing.List[int],
-        intervals: typing.List[CtmInterval],
-        transcription: bool = False,
-        text: str = None,
-    ) -> HierarchicalCtm:
-        phone_symbols = [x.symbol for x in intervals]
-        word_symbols = [self.word_table.find(x) for x in text.split()]
-        word_splits = self._create_pronunciation_string(
-            word_symbols,
-            phone_symbols,
-            transcription=transcription,
-        )
-
-        # Might need some better logic
-        actual_words = [x.replace(" ", "") for x in text.split("<space>")]
-        word_intervals = []
-        current_phone_index = 0
-        current_word_index = 0
-        for w in actual_words:
-            pron = word_splits[current_word_index]
-            if pron == self.silence_phone:
-                word_intervals.append(
-                    WordCtmInterval(
-                        self.silence_word,
-                        0,
-                        intervals[current_phone_index : current_phone_index + 1],
-                    )
-                )
-                current_word_index += 1
-                current_phone_index += 1
-                pron = word_splits[current_word_index]
-
-            phones = pron.split()
-            word_intervals.append(
-                WordCtmInterval(
-                    w, 0, intervals[current_phone_index : current_phone_index + len(phones)]
-                )
-            )
-            current_phone_index += len(phones)
-            current_word_index += 1
-        if current_word_index != len(word_splits):
-            pron = word_splits[current_word_index]
-            if pron == self.silence_phone:
-                word_intervals.append(
-                    WordCtmInterval(
-                        self.silence_word,
-                        0,
-                        intervals[current_phone_index : current_phone_index + 1],
-                    )
-                )
         return HierarchicalCtm(word_intervals, text=text)

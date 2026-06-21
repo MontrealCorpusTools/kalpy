@@ -1736,6 +1736,7 @@ void pybind_training_graph_compiler(py::module &m) {
                py::arg("out_fst"))
         .def("CompileGraphFromLG",
                [](PyClass& gc, const fst::VectorFst<fst::StdArc> &phone2word_fst){
+                    py::gil_scoped_release gil_release;
 
                     VectorFst<StdArc> decode_fst;
 
@@ -1745,7 +1746,8 @@ void pybind_training_graph_compiler(py::module &m) {
                     return decode_fst;
                },
                "Same as `CompileGraph`, but uses an external LG fst.",
-               py::arg("phone2word_fst"))
+               py::arg("phone2word_fst"),
+                  py::return_value_policy::take_ownership)
         .def("CompileGraphFromLG",
                [](PyClass& gc, py::object fst){
                   auto pywrapfst_mod = py::module_::import("pywrapfst");
@@ -1760,7 +1762,8 @@ void pybind_training_graph_compiler(py::module &m) {
                     return decode_fst;
                },
                "Same as `CompileGraph`, but uses an external LG fst.",
-               py::arg("phone2word_fst"))
+               py::arg("phone2word_fst"),
+                  py::return_value_policy::take_ownership)
         .def("CompileGraphFromLG",
                &PyClass::CompileGraphFromLG,
                "Same as `CompileGraph`, but uses an external LG fst.",
@@ -1798,7 +1801,8 @@ void pybind_training_graph_compiler(py::module &m) {
                     }
                     return decode_fst;
                },
-               py::arg("transcript"))
+               py::arg("transcript"),
+                  py::return_value_policy::take_ownership)
         .def("CompileGraphsFromText",
                &PyClass::CompileGraphsFromText,
                "This function creates FSTs from the text and calls CompileGraphs.",
@@ -1899,7 +1903,8 @@ py::module m = _m.def_submodule("decoder", "pybind for decoder");
     // We'll write the lattice without acoustic scaling.
     if (acoustic_scale != 0.0)
       fst::ScaleLattice(fst::AcousticLatticeScale(1.0 / acoustic_scale), &clat);
-      return py::make_tuple(true, alignment, words, clat);
+      ConvertLattice(clat,&lat);
+      return py::make_tuple(true, alignment, words, lat);
   } else {
     // We'll write the lattice without acoustic scaling.
     if (acoustic_scale != 0.0)

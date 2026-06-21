@@ -138,6 +138,88 @@ def fix_many_to_one_alignments(
     return new_ref, new_test
 
 
+def naive_boundary_f1(
+    ref: typing.List[CtmInterval], test: typing.List[CtmInterval], threshold: float = 0.02
+):
+    if not test:
+        return "n/a", "n/a", "n/a", len(ref) - len(test), [], []
+    recall_data = []
+    recall_sum = 0
+    for i, r in enumerate(ref):
+        if i == 0:
+            continue
+        ref_boundary = r.begin
+        previous_distance = None
+        comparison = None
+        previous_comparison = None
+        for t in test:
+            distance = abs(ref_boundary - t.begin)
+            if previous_distance is None or distance < previous_distance:
+                previous_comparison = comparison
+                comparison = t
+                previous_distance = distance
+            elif previous_distance is not None:
+                break
+        if comparison is None:
+            print(ref)
+            print(test)
+            print(i, r)
+            error
+        error = round(r.begin - comparison.begin, 3)
+        if error <= threshold:
+            recall_sum += 1
+        recall_data.append(
+            {
+                "following_reference_phone": r.label,
+                "following_test_phone": comparison.label,
+                "previous_reference_phone": ref[i - 1].label,
+                "previous_test_phone": previous_comparison.label
+                if previous_comparison is not None
+                else "N/A",
+                "boundary_error": error,
+                "reference_boundary": round(r.begin, 3),
+                "test_boundary": round(comparison.begin, 3),
+            }
+        )
+    precision_data = []
+    precision_sum = 0
+    for i, t in enumerate(test):
+        if i == 0:
+            continue
+        test_boundary = t.begin
+        previous_distance = None
+        comparison = None
+        previous_comparison = None
+        for r in ref:
+            distance = abs(test_boundary - r.begin)
+            if previous_distance is None or distance < previous_distance:
+                previous_comparison = comparison
+                comparison = r
+                previous_distance = distance
+            elif previous_distance is not None:
+                break
+        error = round(t.begin - comparison.begin, 3)
+        if error <= threshold:
+            precision_sum += 1
+        precision_data.append(
+            {
+                "following_reference_phone": comparison.label,
+                "following_test_phone": t.label,
+                "previous_reference_phone": previous_comparison.label
+                if previous_comparison is not None
+                else "N/A",
+                "previous_test_phone": test[i - 1].label,
+                "boundary_error": error,
+                "reference_boundary": round(comparison.begin, 3),
+                "test_boundary": round(t.begin, 3),
+            }
+        )
+    recall = recall_sum / len(ref)
+    precision = precision_sum / len(test)
+    f1 = 2 * (precision * recall) / (precision + recall)
+    return precision, recall, f1, len(ref) - len(test), precision_data, recall_data
+
+
 def align_phones(
     ref: typing.List[CtmInterval],
     test: typing.List[CtmInterval],
@@ -149,7 +231,7 @@ def align_phones(
     float,
     float,
     typing.Dict[typing.Tuple[str, str], int],
-    float,
+    IntervalAlignment,
     typing.List[typing.Dict[str, typing.Any]],
 ]:
     """
@@ -261,14 +343,14 @@ def align_phones(
     if debug:
         import logging
 
-        logger = logging.getLogger("mfa")
+        logger = logging.getLogger("kalpy.evaluate")
         if errors:
             logger.debug(
                 f"PER: {phone_error_rate}\nErrors: {errors}\n{format_alignment(alignment)}"
             )
         else:
             logger.debug(f"PER: {phone_error_rate}\n{format_alignment(alignment)}")
-    return score, phone_error_rate, errors, alignment.score, boundary_errors
+    return score, phone_error_rate, errors, alignment, boundary_errors
 
 
 def fix_unk_words(

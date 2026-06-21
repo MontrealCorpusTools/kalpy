@@ -67,7 +67,6 @@ class TrainingGraphCompiler:
         transition_scale: float = 0.0,
         self_loop_scale: float = 0.0,
         batch_size: int = 1000,
-        use_g2p: bool = False,
         disambiguation_symbols: typing.List[int] = None,
         oov_word: str = "<unk>",
     ):
@@ -78,7 +77,6 @@ class TrainingGraphCompiler:
         self.batch_size = batch_size
         self.options = TrainingGraphCompilerOptions(transition_scale, self_loop_scale)
         self._compiler = None
-        self.use_g2p = use_g2p
         self.lexicon_path = None
         self.lexicon_compiler = lexicon_compiler
         self.oov_word = oov_word
@@ -151,7 +149,7 @@ class TrainingGraphCompiler:
         write_scp: bool
             Flag for whether an SCP file should be generated as well
         callback: callable, optional
-            Optional callback function for progress updates
+            Callback function for progress updates
         interjection_words: list[str], optional
             List of words to add as interjections to the transcripts
         cutoff_pattern: str, optional
@@ -168,20 +166,15 @@ class TrainingGraphCompiler:
         for key, transcript in transcripts:
             keys.append(key)
             original_transcripts.append(transcript)
-            if self.use_g2p:
-                transcript_batch.append(transcript)
-            elif interjection_words:
+            logger.debug(f"{key}: {transcript}")
+            if interjection_words:
                 transcript_batch.append(
                     self.generate_utterance_graph(transcript, interjection_words, cutoff_pattern)
                 )
             else:
                 transcript_batch.append([self.to_int(x) for x in transcript.split()])
             if len(keys) >= self.batch_size:
-                if self.use_g2p:
-                    fsts = []
-                    for t in transcript_batch:
-                        fsts.append(self.compile_fst(t))
-                elif interjection_words:
+                if interjection_words:
                     fsts = self.compiler.CompileGraphs(transcript_batch)
                 else:
                     fsts = self.compiler.CompileGraphsFromText(transcript_batch)
@@ -211,11 +204,7 @@ class TrainingGraphCompiler:
                 original_transcripts = []
                 del fsts
         if keys:
-            if self.use_g2p:
-                fsts = []
-                for t in transcript_batch:
-                    fsts.append(self.compile_fst(t))
-            elif interjection_words:
+            if interjection_words:
                 fsts = self.compiler.CompileGraphs(transcript_batch)
             else:
                 fsts = self.compiler.CompileGraphsFromText(transcript_batch)
@@ -376,45 +365,7 @@ class TrainingGraphCompiler:
         :class:`_kalpy.fstext.VectorFst`
             Training graph of transcript
         """
-        if self.use_g2p:
-            g_fst = pynini.accep(transcript, token_type=self.word_table)
-            lg_fst = pynini.compose(g_fst, self._fst, compose_filter="alt_sequence")
-            lg_fst = lg_fst.project("output").rmepsilon()
-            weight_type = lg_fst.weight_type()
-            weight_threshold = pywrapfst.Weight(weight_type, 2.0)
-            state_threshold = 256 + 2 * lg_fst.num_states()
-            lg_fst = pynini.determinize(lg_fst, nstate=state_threshold, weight=weight_threshold)
-            lg_fst = VectorFst.from_pynini(lg_fst)
-            disambig_syms_in = (
-                []
-                if not self.lexicon_compiler.disambiguation
-                else self.lexicon_compiler.disambiguation_symbols
-            )
-            lg_fst = fst_determinize_star(lg_fst, use_log=True)
-            fst_minimize_encoded(lg_fst)
-            fst_push_special(lg_fst)
-            clg_fst, disambig_out, ilabels = fst_compose_context(
-                lg_fst,
-                disambig_syms_in,
-                self.tree.ContextWidth(),
-                self.tree.CentralPosition(),
-            )
-            fst_arc_sort(clg_fst, sort_type="ilabel")
-            h, disambig = make_h_transducer(self.tree, self.transition_model, ilabels)
-            fst = fst_table_compose(h, clg_fst)
-            if fst.Start() == pywrapfst.NO_STATE_ID:
-                logger.debug(f"Falling back to pynini compose for '{transcript}")
-                h = kaldi_to_pynini(h)
-                clg_fst = kaldi_to_pynini(clg_fst)
-                fst = pynini_to_kaldi(pynini.compose(h, clg_fst))
-            fst_determinize_star(fst, use_log=True)
-            fst_rm_symbols(fst, disambig)
-            fst_rm_eps_local(fst)
-            fst_minimize_encoded(fst)
-            fst_add_self_loops(
-                fst, self.transition_model, disambig_syms_in, self.options.self_loop_scale
-            )
-        elif interjection_words:
+        if interjection_words:
             g = self.generate_utterance_graph(transcript, interjection_words, cutoff_pattern)
             # fst = VectorFst()
             # self.compiler.CompileGraph(g, fst)
