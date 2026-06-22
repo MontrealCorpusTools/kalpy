@@ -141,6 +141,35 @@ def fix_many_to_one_alignments(
 def naive_boundary_f1(
     ref: typing.List[CtmInterval], test: typing.List[CtmInterval], threshold: float = 0.02
 ):
+    """
+    Performs a calculation of naive precision, recall, and F1 score for two sets of alignments
+
+    Parameters
+    ----------
+    ref: list[:class:`~montreal_forced_aligner.data.CtmInterval`]
+        List of CTM intervals as reference
+    test: list[:class:`~montreal_forced_aligner.data.CtmInterval`]
+        List of CTM intervals to compare to reference
+    threshold: float, optional
+        Threshold in seconds for precision/recall calculation, defaults to 0.02 seconds (20 ms)
+
+    Returns
+    -------
+    float
+        Precision, defined as the percentage of boundaries in the test alignments that have a corresponding boundary
+        in the reference alignments within the threshold specified
+    float
+        Recall, defined as the percentage of boundaries in the reference alignments that have a corresponding boundary
+        in the test alignments within the threshold specified
+    float
+        F1 score, defined as the harmonic mean of precision and recall
+    int
+        Difference in number of intervals between reference and test alignments
+    list[dict[str, any]]
+        Data as part of precision calculation
+    list[dict[str, any]]
+        Data as part of recall calculation
+    """
     if not test:
         return "n/a", "n/a", "n/a", len(ref) - len(test), [], []
     recall_data = []
