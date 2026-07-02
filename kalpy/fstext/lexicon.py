@@ -16,6 +16,8 @@ from _kalpy.lat import WordAlignLatticeLexiconInfo
 from kalpy.exceptions import LexiconError, PhonesToPronunciationsError
 from kalpy.gmm.data import CtmInterval, HierarchicalCtm, WordCtmInterval
 
+G2PCompiler = None
+
 
 @dataclass
 class Pronunciation:
