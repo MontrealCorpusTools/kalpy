@@ -69,6 +69,7 @@ class TrainingGraphCompiler:
         batch_size: int = 1000,
         disambiguation_symbols: typing.List[int] = None,
         oov_word: str = "<unk>",
+        **kwargs,
     ):
         self.transition_model = TransitionModel()
         ReadKaldiObject(str(model_path), self.transition_model)
