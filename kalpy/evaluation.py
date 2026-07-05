@@ -405,24 +405,26 @@ def fix_unk_words(
         Aligned words with unknown word tokens replaced with their original label
     """
 
-    mapping = {}
-    ref_intervals = []
-    for w in ref:
-        ref_intervals.append(WordCtmInterval(w, lexicon_compiler.to_int(w), []))
-        if lexicon_compiler.to_int(w) == lexicon_compiler.to_int(lexicon_compiler.oov_word):
-            if w not in mapping:
-                mapping[w] = {lexicon_compiler.oov_word}
+    oov_word = lexicon_compiler.oov_word
+    oov_id = lexicon_compiler.to_int(oov_word)
 
-    alignment = align_intervals(ref_intervals, test, {lexicon_compiler.silence_word}, {})
-    output_ctm = []
+    mapping: dict[str, set[str]] = {oov_word: set()}
+    ref_intervals: list[WordCtmInterval] = []
+    for w in ref:
+        wid = lexicon_compiler.to_int(w)
+        ref_intervals.append(WordCtmInterval(w, wid, []))
+        if wid == oov_id:
+            mapping[oov_word].add(w)
+
+    alignment = align_intervals(ref_intervals, test, {lexicon_compiler.silence_word}, mapping)
+    output_ctm: list[WordCtmInterval] = []
     for sa, sb in alignment.alignment:
         if sa.label == "-":
             output_ctm.append(sb)
         elif sb.label == "-":
             continue
         else:
-            if sa.label != sb.label and sb.label == lexicon_compiler.oov_word:
-                sb.label = sa.label
+            sb.label = sa.label
             output_ctm.append(sb)
     return output_ctm
 
