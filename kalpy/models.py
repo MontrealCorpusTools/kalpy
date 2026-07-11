@@ -381,7 +381,7 @@ class AcousticModel:
             else:
                 with open(meta_path, "r", encoding="utf8") as f:
                     if file_format == "yaml":
-                        self._meta = yaml.load(f, Loader=yaml.Loader)
+                        self._meta = yaml.load(f, Loader=yaml.SafeLoader)
                     else:
                         self._meta = json.load(f)
                 if self._meta["features"] == "mfcc+deltas":
