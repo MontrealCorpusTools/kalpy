@@ -1,6 +1,7 @@
 """Classes for computing pitch features"""
 from __future__ import annotations
 
+import os
 import pathlib
 import typing
 
@@ -298,7 +299,7 @@ class PitchComputer:
 
     def export_feats(
         self,
-        file_name: typing.Union[pathlib.Path, str],
+        file_name: os.PathLike,
         segments: typing.Iterable[typing.Tuple[str, Segment]],
         write_scp: bool = False,
         compress: bool = True,

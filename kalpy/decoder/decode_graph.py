@@ -83,8 +83,8 @@ class DecodeGraphCompiler:
 
     def export_hclg(
         self,
-        arpa_path: typing.Union[pathlib.Path, str],
-        file_name: typing.Union[pathlib.Path, str],
+        arpa_path: os.PathLike,
+        file_name: os.PathLike,
     ) -> None:
         """
         Export HCLG.fst
@@ -103,7 +103,7 @@ class DecodeGraphCompiler:
 
     def export_g(
         self,
-        file_name: typing.Union[pathlib.Path, str],
+        file_name: os.PathLike,
     ) -> None:
         """
         Export g.fst
@@ -120,7 +120,7 @@ class DecodeGraphCompiler:
 
     def load_from_file(
         self,
-        hclg_fst_path: typing.Union[pathlib.Path, str],
+        hclg_fst_path: os.PathLike,
     ) -> None:
         """
         Read HCLG.fst from file
@@ -135,7 +135,7 @@ class DecodeGraphCompiler:
 
     def load_g_from_file(
         self,
-        g_fst_path: typing.Union[pathlib.Path, str],
+        g_fst_path: os.PathLike,
     ) -> None:
         """
         Read g.fst from file

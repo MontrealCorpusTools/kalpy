@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-import pathlib
+import os
 import typing
 
 from _kalpy import transform
@@ -20,7 +20,7 @@ logger.flush = lambda: None
 class LdaStatsAccumulator:
     def __init__(
         self,
-        acoustic_model_path: typing.Union[pathlib.Path, str],
+        acoustic_model_path: os.PathLike,
         silence_phones: typing.List[int],
         weight_distribute: bool = False,
         rand_prune: float = 0.0,
@@ -80,7 +80,7 @@ class LdaStatsAccumulator:
 class MlltStatsAccumulator:
     def __init__(
         self,
-        acoustic_model_path: typing.Union[pathlib.Path, str],
+        acoustic_model_path: os.PathLike,
         silence_phones: typing.List[int],
         weight_distribute: bool = False,
         rand_prune: float = 0.0,

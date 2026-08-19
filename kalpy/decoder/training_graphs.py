@@ -1,5 +1,6 @@
 """Classes for generating training graphs"""
 import logging
+import os
 import pathlib
 import typing
 
@@ -61,8 +62,8 @@ class TrainingGraphCompiler:
 
     def __init__(
         self,
-        model_path: typing.Union[pathlib.Path, str],
-        tree_path: typing.Union[pathlib.Path, str],
+        model_path: os.PathLike,
+        tree_path: os.PathLike,
         lexicon_compiler: LexiconCompiler,
         transition_scale: float = 0.0,
         self_loop_scale: float = 0.0,
@@ -131,7 +132,7 @@ class TrainingGraphCompiler:
 
     def export_graphs(
         self,
-        file_name: typing.Union[pathlib.Path, str],
+        file_name: os.PathLike,
         transcripts: typing.Iterable[typing.Tuple[str, str]],
         write_scp: bool = False,
         callback: typing.Callable = None,

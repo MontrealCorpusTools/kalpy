@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-import pathlib
+import os
 import typing
 
 from _kalpy import gmm, hmm, tree
@@ -19,7 +19,7 @@ logger.flush = lambda: None
 
 
 class GmmStatsAccumulator:
-    def __init__(self, acoustic_model_path: typing.Union[pathlib.Path, str]):
+    def __init__(self, acoustic_model_path: os.PathLike):
         self.acoustic_model_path = str(acoustic_model_path)
         self.transition_accs = DoubleVector()
         self.transition_model, self.acoustic_model = read_gmm_model(self.acoustic_model_path)
@@ -76,7 +76,7 @@ class GmmStatsAccumulator:
 
     def export_stats(
         self,
-        file_name: typing.Union[pathlib.Path, str],
+        file_name: os.PathLike,
         feature_archive: FeatureArchive,
         alignment_archive: AlignmentArchive,
     ):
@@ -92,7 +92,7 @@ class GmmStatsAccumulator:
 class TreeStatsAccumulator:
     def __init__(
         self,
-        acoustic_model_path: typing.Union[pathlib.Path, str],
+        acoustic_model_path: os.PathLike,
         var_floor: float = 0.01,
         context_width: int = 3,
         central_position: int = 1,
@@ -146,7 +146,7 @@ class TreeStatsAccumulator:
 
     def export_stats(
         self,
-        file_name: typing.Union[pathlib.Path, str],
+        file_name: os.PathLike,
         feature_archive: FeatureArchive,
         alignment_archive: AlignmentArchive,
     ):
@@ -159,7 +159,7 @@ class TreeStatsAccumulator:
 
 
 class TwoFeatsStatsAccumulator:
-    def __init__(self, acoustic_model_path: typing.Union[pathlib.Path, str]):
+    def __init__(self, acoustic_model_path: os.PathLike):
         self.acoustic_model_path = str(acoustic_model_path)
         self.transition_accs = DoubleVector()
         self.transition_model, self.acoustic_model = read_gmm_model(self.acoustic_model_path)

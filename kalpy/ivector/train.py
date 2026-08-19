@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-import pathlib
+import os
 import typing
 
 from _kalpy import gmm, ivector
@@ -18,7 +18,7 @@ logger.flush = lambda: None
 
 
 class GlobalGmmStatsAccumulator:
-    def __init__(self, model_path: typing.Union[pathlib.Path, str]):
+    def __init__(self, model_path: os.PathLike):
         self.model_path = str(model_path)
         self.model: gmm.DiagGmm = read_kaldi_object(gmm.DiagGmm, self.model_path)
         self.gmm_accs = gmm.AccumDiagGmm()
@@ -59,7 +59,7 @@ class GlobalGmmStatsAccumulator:
 
 
 class IvectorExtractorStatsAccumulator:
-    def __init__(self, ivector_extractor_path: typing.Union[pathlib.Path, str]):
+    def __init__(self, ivector_extractor_path: os.PathLike):
         self.ivector_extractor_path = str(ivector_extractor_path)
 
         self.model: ivector.IvectorExtractor = read_kaldi_object(

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import pathlib
 import typing
 
@@ -100,7 +101,7 @@ class CmvnComputer:
 
     def export_cmvn(
         self,
-        file_name: typing.Union[pathlib.Path, str],
+        file_name: os.PathLike,
         feature_archive: FeatureArchive,
         spk2utt: KaldiMapping,
         write_scp: bool = False,

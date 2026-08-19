@@ -33,7 +33,7 @@ logger.flush = lambda: None
 class GmmDecoder:
     def __init__(
         self,
-        acoustic_model_path: typing.Union[pathlib.Path, str],
+        acoustic_model_path: os.PathLike,
         hclg_fst: ConstFst,
         acoustic_scale: float = 0.1,
         beam: float = 16.0,
@@ -236,7 +236,7 @@ class GmmDecoder:
 class GmmRescorer:
     def __init__(
         self,
-        acoustic_model_path: typing.Union[pathlib.Path, str],
+        acoustic_model_path: os.PathLike,
         acoustic_scale: float = 0.1,
         lattice_beam: float = 6.0,
     ):

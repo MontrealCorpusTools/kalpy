@@ -138,7 +138,7 @@ class MatrixArchive:
         Path to archive or SCP file to read from
     """
 
-    def __init__(self, file_name: typing.Union[pathlib.Path, str], double: bool = False):
+    def __init__(self, file_name: os.PathLike, double: bool = False):
         if not os.path.exists(file_name):
             raise OSError(f"Specified file does not exist: {file_name}")
         self.file_name = str(file_name)

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import pathlib
 import typing
 
@@ -101,7 +102,7 @@ class VadComputer:
 
     def export_vad(
         self,
-        file_name: typing.Union[pathlib.Path, str],
+        file_name: os.PathLike,
         feature_archive: FeatureArchive,
         write_scp: bool = False,
         callback: typing.Callable = None,

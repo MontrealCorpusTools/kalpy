@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import pathlib
 import sys
 import traceback
@@ -53,7 +54,7 @@ class GmmAligner:
 
     def __init__(
         self,
-        acoustic_model_path: typing.Union[pathlib.Path, str],
+        acoustic_model_path: os.PathLike,
         acoustic_scale: float = 1.0,
         transition_scale: float = 1.0,
         self_loop_scale: float = 1.0,
@@ -316,12 +317,12 @@ class GmmAligner:
 
     def export_alignments(
         self,
-        file_name: typing.Union[pathlib.Path, str],
+        file_name: os.PathLike,
         training_graph_archive: FstArchive,
         feature_archive: FeatureArchive,
         reference_phone_archive: RandomAccessInt32VectorVectorReader = None,
-        word_file_name: typing.Union[pathlib.Path, str] = None,
-        likelihood_file_name: typing.Union[pathlib.Path, str] = None,
+        word_file_name: typing.Optional[os.PathLike] = None,
+        likelihood_file_name: typing.Optional[os.PathLike] = None,
         write_scp: bool = False,
         callback: typing.Callable = None,
         utterance_parameters: typing.Dict[str, typing.Dict[str, typing.Any]] = None,

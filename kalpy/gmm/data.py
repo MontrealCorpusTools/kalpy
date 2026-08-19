@@ -290,9 +290,9 @@ class AlignmentArchive:
 
     def __init__(
         self,
-        file_name: typing.Union[pathlib.Path, str],
-        words_file_name: typing.Union[pathlib.Path, str] = None,
-        likelihood_file_name: typing.Union[pathlib.Path, str] = None,
+        file_name: os.PathLike,
+        words_file_name: typing.Optional[os.PathLike] = None,
+        likelihood_file_name: typing.Optional[os.PathLike] = None,
     ):
         if not os.path.exists(file_name):
             raise OSError(f"Specified file does not exist: {file_name}")
@@ -400,7 +400,7 @@ class TranscriptionArchive:
 
     def __init__(
         self,
-        file_name: typing.Union[pathlib.Path, str],
+        file_name: os.PathLike,
         lm_scale: float = 1.0,
         acoustic_scale: float = 1.0,
     ):
@@ -453,7 +453,7 @@ class LatticeArchive:
         Path to archive or SCP file to read from
     """
 
-    def __init__(self, file_name: typing.Union[pathlib.Path, str], determinized: bool = True):
+    def __init__(self, file_name: os.PathLike, determinized: bool = True):
         if not os.path.exists(file_name):
             raise OSError(f"Specified file does not exist: {file_name}")
         self.file_name = str(file_name)

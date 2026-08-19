@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-import pathlib
+import os
 import threading
 import typing
 
@@ -23,8 +23,8 @@ logger.flush = lambda: None
 class FmllrComputer:
     def __init__(
         self,
-        alignment_acoustic_model_path: typing.Union[pathlib.Path, str],
-        acoustic_model_path: typing.Union[pathlib.Path, str],
+        alignment_acoustic_model_path: os.PathLike,
+        acoustic_model_path: os.PathLike,
         silence_phones: typing.List[int],
         spk2utt: KaldiMapping = None,
         weight_distribute: bool = False,
@@ -207,7 +207,7 @@ class FmllrComputer:
 
     def export_transforms(
         self,
-        file_name: typing.Union[pathlib.Path, str],
+        file_name: os.PathLike,
         feature_archive: FeatureArchive,
         alignment_archive: typing.Union[AlignmentArchive, LatticeArchive],
         previous_transform_archive: MatrixArchive = None,

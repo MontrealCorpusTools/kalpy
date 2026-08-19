@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import logging
+import os
 import pathlib
 import typing
 
-import librosa
 import numpy as np
 
 from _kalpy import feat
@@ -249,7 +249,7 @@ class MfccComputer:
 
     def export_feats(
         self,
-        file_name: typing.Union[pathlib.Path, str],
+        file_name: os.PathLike,
         segments: typing.Iterable[typing.Tuple[str, Segment]],
         write_scp: bool = False,
         compress: bool = True,

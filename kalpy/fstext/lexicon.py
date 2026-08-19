@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import collections
 import math
+import os
 import pathlib
 import re
 import typing
@@ -35,7 +36,7 @@ class Pronunciation:
 
 
 def parse_dictionary_file(
-    path: typing.Union[pathlib.Path, str],
+    path: os.PathLike,
 ) -> typing.Generator[Pronunciation]:
     """
     Parses a lexicon file and yields parsed pronunciation lines
@@ -230,7 +231,7 @@ class LexiconCompiler:
             "</s>",
         }
 
-    def load_pronunciations(self, file_name: typing.Union[pathlib.Path, str]) -> None:
+    def load_pronunciations(self, file_name: os.PathLike) -> None:
         """
         Load pronunciations from a dictionary file and calculate necessary disambiguation symbols
 
@@ -793,7 +794,7 @@ class LexiconCompiler:
 
     def load_l_from_file(
         self,
-        l_fst_path: typing.Union[pathlib.Path, str],
+        l_fst_path: os.PathLike,
     ) -> None:
         """
         Read g.fst from file
@@ -807,7 +808,7 @@ class LexiconCompiler:
 
     def load_l_align_from_file(
         self,
-        l_fst_path: typing.Union[pathlib.Path, str],
+        l_fst_path: os.PathLike,
     ) -> None:
         """
         Read g.fst from file

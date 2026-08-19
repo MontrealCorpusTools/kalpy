@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import os
-import pathlib
 import typing
 from contextlib import contextmanager
 
@@ -53,9 +52,7 @@ def read_kaldi_object(obj_type, path, binary=True):
 
 
 @contextmanager
-def kalpy_logger(
-    log_name: str, log_path: typing.Union[pathlib.Path, str]
-) -> typing.Generator[logging.Logger]:
+def kalpy_logger(log_name: str, log_path: os.PathLike) -> typing.Generator[logging.Logger]:
     kalpy_logging = logging.getLogger(log_name)
     file_handler = logging.FileHandler(log_path, encoding="utf8")
     file_handler.setLevel(logging.DEBUG)

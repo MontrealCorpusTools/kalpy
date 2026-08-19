@@ -68,7 +68,7 @@ class IvectorExtractor:
 
     def export_ivectors(
         self,
-        file_name: typing.Union[pathlib.Path, str],
+        file_name: os.PathLike,
         feature_archive: FeatureArchive,
         write_scp: bool = False,
         callback: typing.Callable = None,

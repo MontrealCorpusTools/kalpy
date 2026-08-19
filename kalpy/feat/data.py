@@ -19,12 +19,12 @@ from kalpy.utils import generate_read_specifier, read_kaldi_object
 class FeatureArchive:
     def __init__(
         self,
-        file_name: typing.Union[pathlib.Path, str],
-        utt2spk: KaldiMapping = None,
-        cmvn_file_name: typing.Union[pathlib.Path, str] = None,
-        lda_mat_file_name: typing.Union[pathlib.Path, str] = None,
-        transform_file_name: typing.Union[pathlib.Path, str] = None,
-        vad_file_name: typing.Union[pathlib.Path, str] = None,
+        file_name: os.PathLike,
+        utt2spk: typing.Optional[KaldiMapping] = None,
+        cmvn_file_name: typing.Optional[os.PathLike] = None,
+        lda_mat_file_name: typing.Optional[os.PathLike] = None,
+        transform_file_name: typing.Optional[os.PathLike] = None,
+        vad_file_name: typing.Optional[os.PathLike] = None,
         use_sliding_cmvn: bool = False,
         cmvn_norm_vars: bool = False,
         cmvn_reverse: bool = False,
@@ -35,7 +35,7 @@ class FeatureArchive:
         sliding_cmvn_window: int = 300,
         sliding_cmvn_center_window: bool = True,
         double: bool = False,
-        callback: typing.Callable = None,
+        callback: typing.Optional[typing.Callable] = None,
     ):
         self.cmvn_reader = None
         self.transform_reader = None

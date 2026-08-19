@@ -19,7 +19,7 @@ class FstArchive:
         Path to archive or SCP file to read from
     """
 
-    def __init__(self, file_name: typing.Union[pathlib.Path, str]):
+    def __init__(self, file_name: os.PathLike):
         if not os.path.exists(file_name):
             raise OSError(f"Specified file does not exist: {file_name}")
         self.file_name = str(file_name)
