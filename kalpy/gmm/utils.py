@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import os.path
-import pathlib
+import os
 import typing
 
 from _kalpy.gmm import AmDiagGmm
@@ -11,7 +10,7 @@ from _kalpy.util import Input, Output, ReadKaldiObject
 from kalpy.exceptions import ReadError
 
 
-def read_transition_model(model_path: typing.Union[str, pathlib.Path]) -> TransitionModel:
+def read_transition_model(model_path: os.PathLike) -> TransitionModel:
     if not os.path.exists(model_path):
         raise ReadError(f"The specified model path {model_path} does not exist.")
     ki = Input()
@@ -22,9 +21,7 @@ def read_transition_model(model_path: typing.Union[str, pathlib.Path]) -> Transi
     return transition_model
 
 
-def read_gmm_model(
-    model_path: typing.Union[str, pathlib.Path]
-) -> typing.Tuple[TransitionModel, AmDiagGmm]:
+def read_gmm_model(model_path: os.PathLike) -> typing.Tuple[TransitionModel, AmDiagGmm]:
     if not os.path.exists(model_path):
         raise ReadError(f"The specified model path {model_path} does not exist.")
     ki = Input()
@@ -37,7 +34,7 @@ def read_gmm_model(
     return transition_model, acoustic_model
 
 
-def read_topology(topo_path: typing.Union[str, pathlib.Path]) -> HmmTopology:
+def read_topology(topo_path: os.PathLike) -> HmmTopology:
     if not os.path.exists(topo_path):
         raise ReadError(f"The specified topo path {topo_path} does not exist.")
     ki = Input()
@@ -49,7 +46,7 @@ def read_topology(topo_path: typing.Union[str, pathlib.Path]) -> HmmTopology:
 
 
 def write_gmm_model(
-    model_path: typing.Union[str, pathlib.Path],
+    model_path: os.PathLike,
     transition_model: TransitionModel,
     acoustic_model: AmDiagGmm,
     binary: bool = True,
@@ -60,15 +57,13 @@ def write_gmm_model(
     ko.Close()
 
 
-def write_tree(
-    tree_path: typing.Union[str, pathlib.Path], tree: ContextDependency, binary: bool = True
-) -> None:
+def write_tree(tree_path: os.PathLike, tree: ContextDependency, binary: bool = True) -> None:
     ko = Output(str(tree_path), binary)
     tree.Write(ko.Stream(), binary)
     ko.Close()
 
 
-def read_tree(tree_path: typing.Union[str, pathlib.Path]) -> ContextDependency:
+def read_tree(tree_path: os.PathLike) -> ContextDependency:
     if not os.path.exists(tree_path):
         raise ReadError(f"The specified tree path {tree_path} does not exist.")
     tree = ContextDependency()

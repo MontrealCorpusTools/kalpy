@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import pathlib
 import typing
 
@@ -21,8 +22,8 @@ logger.flush = lambda: None
 class IvectorExtractor:
     def __init__(
         self,
-        dubm_path: typing.Union[str, pathlib.Path],
-        ivector_extractor_path: typing.Union[str, pathlib.Path],
+        dubm_path: os.PathLike,
+        ivector_extractor_path: os.PathLike,
         acoustic_weight: float = 1.0,
         max_count: float = 0.0,
         num_gselect: int = 50,

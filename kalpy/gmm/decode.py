@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import pathlib
 import typing
 
@@ -195,11 +196,11 @@ class GmmDecoder:
 
     def export_lattices(
         self,
-        file_name: typing.Union[str, pathlib.Path],
+        file_name: os.PathLike,
         feature_archive: FeatureArchive,
         write_scp: bool = False,
-        alignment_file_name: typing.Union[str, pathlib.Path] = None,
-        word_file_name: typing.Union[str, pathlib.Path] = None,
+        alignment_file_name: typing.Optional[os.PathLike] = None,
+        word_file_name: typing.Optional[os.PathLike] = None,
         callback: typing.Callable = None,
     ):
         write_specifier = generate_write_specifier(file_name, write_scp)
@@ -275,7 +276,7 @@ class GmmRescorer:
 
     def export_lattices(
         self,
-        file_name: typing.Union[str, pathlib.Path],
+        file_name: os.PathLike,
         lattice_archive: LatticeArchive,
         feature_archive: FeatureArchive,
         write_scp: bool = False,

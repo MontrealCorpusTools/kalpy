@@ -1,18 +1,18 @@
-import pathlib
+import os
 import typing
 
 import numpy as np
 
 from _kalpy.ivector import Plda, ivector_normalize_length, ivector_subtract_mean
 from _kalpy.matrix import DoubleVector, FloatVector
-from kalpy.utils import read_kaldi_object
 from kalpy.ivector.data import IvectorArchive
+from kalpy.utils import read_kaldi_object
 
 
 class PldaScorer:
     def __init__(
         self,
-        plda_path: typing.Union[str, pathlib.Path],
+        plda_path: os.PathLike,
         normalize_length: bool = True,
         simple_length_norm: bool = True,
     ):
@@ -37,8 +37,10 @@ class PldaScorer:
             if self.normalize_length:
                 ivector_normalize_length(ivector)
             speaker_ivectors.append(DoubleVector(ivector))
-        ivector_subtract_mean(speaker_ivectors,normalize=self.normalize_length)
-        self.speaker_ivectors = self.plda.transform_ivectors(speaker_ivectors, self.num_speaker_examples)
+        ivector_subtract_mean(speaker_ivectors, normalize=self.normalize_length)
+        self.speaker_ivectors = self.plda.transform_ivectors(
+            speaker_ivectors, self.num_speaker_examples
+        )
 
     def transform_ivector(self, ivector: np.ndarray, num_examples: int = 1):
         return self.plda.transform_ivector(ivector, num_examples)
@@ -68,6 +70,8 @@ class PldaScorer:
         if isinstance(utterance_ivector, np.ndarray):
             utterance_ivector = DoubleVector()
             utterance_ivector.from_numpy(utterance_ivector)
-        ind, score = self.plda.classify_utterance(utterance_ivector, self.speaker_ivectors, self.num_speaker_examples)
+        ind, score = self.plda.classify_utterance(
+            utterance_ivector, self.speaker_ivectors, self.num_speaker_examples
+        )
         speaker = self.speaker_ids[ind]
         return speaker, score

@@ -37,9 +37,9 @@ class DecodeGraphCompiler:
     """
     Parameters
     ----------
-    acoustic_model_path: str
+    acoustic_model_path: :class:`~os.PathLike`
         Path to model file
-    tree_path: str
+    tree_path: :class:`~os.PathLike`
         Path to tree file
     lexicon_compiler: :class:`~kalpy.fstext.lexicon.LexiconCompiler`
         Lexicon compiler to use in generating training graphs
@@ -58,10 +58,10 @@ class DecodeGraphCompiler:
 
     def __init__(
         self,
-        acoustic_model_path: typing.Union[str, pathlib.Path],
-        tree_path: typing.Union[str, pathlib.Path],
+        acoustic_model_path: os.PathLike,
+        tree_path: os.PathLike,
         lexicon_compiler: LexiconCompiler,
-        arpa_path: typing.Union[str, pathlib.Path] = None,
+        arpa_path: typing.Optional[os.PathLike] = None,
         transition_scale: float = 1.0,
         self_loop_scale: float = 0.1,
     ):
@@ -148,13 +148,13 @@ class DecodeGraphCompiler:
         g_fst_path = str(g_fst_path)
         self.g_fst = VectorFst.Read(g_fst_path)
 
-    def compile_g_fst(self, arpa_path: typing.Union[str, pathlib.Path]) -> VectorFst:
+    def compile_g_fst(self, arpa_path: os.PathLike) -> VectorFst:
         """
         Compile G.fst for a language model
 
         Parameters
         ----------
-        arpa_path: str
+        arpa_path: :class:`~os.PathLike`
             Path to ARPA format language model
 
         Returns
@@ -175,17 +175,17 @@ class DecodeGraphCompiler:
 
     def compile_g_carpa(
         self,
-        arpa_path: typing.Union[str, pathlib.Path],
-        compiled_path: typing.Union[str, pathlib.Path],
+        arpa_path: os.PathLike,
+        compiled_path: os.PathLike,
     ) -> None:
         """
         Compile G.carpa for a language model
 
         Parameters
         ----------
-        arpa_path: str
+        arpa_path: :class:`~os.PathLike`
             Path to ARPA format language model
-        compiled_path: str
+        compiled_path: :class:`~os.PathLike`
             Path to compiled G.carpa
         """
         compiled_path = str(compiled_path)
@@ -239,13 +239,13 @@ class DecodeGraphCompiler:
         else:
             os.remove(temp_carpa_path)
 
-    def compile_lg_fst(self, arpa_path: typing.Union[str, pathlib.Path]) -> VectorFst:
+    def compile_lg_fst(self, arpa_path: os.PathLike) -> VectorFst:
         """
         Compile LG.fst for a language model
 
         Parameters
         ----------
-        arpa_path: str
+        arpa_path: :class:`~os.PathLike`
             Path to ARPA format language model
 
         Returns
@@ -263,14 +263,14 @@ class DecodeGraphCompiler:
         return lg_fst
 
     def compile_clg_fst(
-        self, arpa_path: typing.Union[str, pathlib.Path]
+        self, arpa_path: os.PathLike
     ) -> typing.Tuple[VectorFst, typing.List[typing.List[int]]]:
         """
         Compile CLG.fst for a language model
 
         Parameters
         ----------
-        arpa_path: str
+        arpa_path: :class:`~os.PathLike`
             Path to ARPA format language model
 
         Returns
@@ -292,13 +292,13 @@ class DecodeGraphCompiler:
         fst_arc_sort(clg_fst, sort_type="ilabel")
         return clg_fst, ilabels
 
-    def compile_hclg_fst(self, arpa_path: typing.Union[str, pathlib.Path]):
+    def compile_hclg_fst(self, arpa_path: os.PathLike):
         """
         Compile HCLG.fst for a language model
 
         Parameters
         ----------
-        arpa_path: str
+        arpa_path: :class:`~os.PathLike`
             Path to ARPA format language model
 
         Returns

@@ -86,6 +86,10 @@ class KalpyAligner:
         self.self_loop_scale = self_loop_scale
         self.boost_silence = boost_silence
         self.careful = careful
+        if self.has_multiple_lexicons:
+            silence_symbols = next(iter(self.lexicon_compiler.values())).silence_symbols
+        else:
+            silence_symbols = self.lexicon_compiler.silence_symbols
         self.aligner = GmmAligner(
             self.acoustic_model.model_path,
             beam=beam,
@@ -94,6 +98,7 @@ class KalpyAligner:
             acoustic_scale=acoustic_scale,
             self_loop_scale=self_loop_scale,
             careful=careful,
+            silence_phones=silence_symbols,
         )
         self.ali_aligner = None
         if self.acoustic_model.alignment_model_path != self.acoustic_model.model_path:
@@ -105,15 +110,12 @@ class KalpyAligner:
                 acoustic_scale=acoustic_scale,
                 self_loop_scale=self_loop_scale,
                 careful=careful,
+                silence_phones=silence_symbols,
             )
         if self.boost_silence != 1.0:
-            if self.has_multiple_lexicons:
-                silence_symbols = next(iter(self.lexicon_compiler.values())).silence_symbols
-            else:
-                silence_symbols = self.lexicon_compiler.silence_symbols
             if self.ali_aligner is not None:
-                self.ali_aligner.boost_silence(boost_silence, silence_symbols)
-            self.aligner.boost_silence(boost_silence, silence_symbols)
+                self.ali_aligner.boost_silence(boost_silence)
+            self.aligner.boost_silence(boost_silence)
 
     def _align_utterance(
         self,

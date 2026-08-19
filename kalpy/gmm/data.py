@@ -76,7 +76,7 @@ class HierarchicalCtm:
 
     def export_textgrid(
         self,
-        file_name: typing.Union[str, pathlib.Path],
+        file_name: os.PathLike,
         file_duration: float = None,
         output_format: typing.Literal[
             "short_textgrid", "long_textgrid", "json", "textgrid_json"

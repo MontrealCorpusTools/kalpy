@@ -11,7 +11,6 @@ from _kalpy.util import (
     SequentialBaseDoubleVectorReader,
     SequentialInt32VectorVectorReader,
 )
-from kalpy.data import PathLike
 from kalpy.utils import generate_read_specifier, read_kaldi_object
 
 
@@ -21,11 +20,13 @@ class IvectorArchive:
 
     Parameters
     ----------
-    file_name: :class:`~pathlib.Path` or str
+    file_name: :class:`~os.PathLike`
         Path to archive or SCP file to read from
     """
 
-    def __init__(self, file_name: PathLike, num_utterances_file_name: PathLike = None):
+    def __init__(
+        self, file_name: os.PathLike, num_utterances_file_name: typing.Optional[os.PathLike] = None
+    ):
         if not os.path.exists(file_name):
             raise OSError(f"Specified file does not exist: {file_name}")
         self.file_name = str(file_name)
@@ -92,7 +93,7 @@ class GselectArchive:
         Path to archive or SCP file to read from
     """
 
-    def __init__(self, file_name: PathLike):
+    def __init__(self, file_name: os.PathLike):
         if not os.path.exists(file_name):
             raise OSError(f"Specified file does not exist: {file_name}")
         self.file_name = str(file_name)

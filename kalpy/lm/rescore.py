@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-import pathlib
+import os
 import typing
 
 from _kalpy.fstext import VectorFst
@@ -85,7 +85,7 @@ class LmRescorer:
 
     def export_lattices(
         self,
-        file_name: typing.Union[str, pathlib.Path],
+        file_name: os.PathLike,
         lattice_archive: LatticeArchive,
         add_lm: typing.Union[VectorFst, ConstArpaLm],
         write_scp: bool = False,
