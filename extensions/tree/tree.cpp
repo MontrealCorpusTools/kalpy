@@ -1054,11 +1054,10 @@ void pybind_context_dep(py::module& m) {
       .def(py::init<int32, int32, EventMap *>(), py::arg("N"),
            py::arg("P"), py::arg("to_pdf"))
            .def(py::init([](std::string file_path){
-                  ContextDependency ctx_dep;
-                  ReadKaldiObject(file_path, &ctx_dep);
-                  return &ctx_dep;}),
-                  py::arg("file_path"),
-                  py::return_value_policy::reference)
+                  auto ctx_dep = std::make_unique<ContextDependency>();
+                  ReadKaldiObject(file_path, ctx_dep.get());
+                  return ctx_dep;}),
+                  py::arg("file_path"))
         .def("Read", &PyClass::Read, py::arg("is"), py::arg("binary"),
       py::call_guard<py::gil_scoped_release>())
         .def("Write", &PyClass::Write, py::arg("os"), py::arg("binary"),
@@ -1068,7 +1067,6 @@ void pybind_context_dep(py::module& m) {
         .def("NumPdfs", &PyClass::NumPdfs)
         .def("ToPdfMap", &PyClass::ToPdfMap)
         //.def("GetPdfInfo", &PyClass::GetPdfInfo, py::arg("phones"), py::arg("num_pdf_classes"), py::arg("pdf_info"))
-        .def("Compute", &PyClass::Compute, py::arg("phoneseq"), py::arg("pdf_class"), py::arg("pdf_id"))
         .def("__str__", [](const PyClass& cd) {
           std::ostringstream os;
           bool binary = false;
