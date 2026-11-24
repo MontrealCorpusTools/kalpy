@@ -2027,10 +2027,10 @@ void init_gmm(py::module &_m) {
   m.def("gmm_align_equal",
           [](
       const VectorFst<StdArc> &decode_fst,
-      const Matrix<BaseFloat> &features){
+      const Matrix<BaseFloat> &features,
+      int32 rand_seed = 1234){
           py::gil_scoped_release release;
         VectorFst<StdArc> path;
-        int32 rand_seed = 1234;
         std::vector<int32> aligned_seq, words;
 
         if (EqualAlign(decode_fst, features.NumRows(), rand_seed, &path) ) {
@@ -2042,7 +2042,8 @@ void init_gmm(py::module &_m) {
           return py::make_tuple(aligned_seq, words);
           },
         py::arg("decode_fst"),
-        py::arg("features")
+        py::arg("features"),
+        py::arg("rand_seed") = 1234
         );
 
   m.def("gmm_align_compiled",
